@@ -117,10 +117,15 @@ if (empty($reshook)) {
 
 $form = new Form($db);
 
-llxHeader('', $langs->trans('ProductionSheet').' - '.$object->ref, '', '', 0, 0, 
-    array('/custom/ficheproduction/css/ficheproduction.css'),
-    array('/custom/ficheproduction/js/ficheproduction.js')
+// CSS et JS files
+$arrayofcss = array(
+    '/custom/ficheproduction/css/ficheproduction.css'
 );
+$arrayofjs = array(
+    '/custom/ficheproduction/js/ficheproduction.js'
+);
+
+llxHeader('', $langs->trans('ProductionSheet').' - '.$object->ref, '', '', 0, 0, $arrayofjs, $arrayofcss);
 
 if ($id > 0 || !empty($ref)) {
     $result = $object->fetch($id, $ref);
