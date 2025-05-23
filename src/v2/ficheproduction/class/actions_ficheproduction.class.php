@@ -289,7 +289,7 @@ class ActionsFicheProduction
         
         // Return JSON response
         header('Content-Type: application/json');
-        echo json_encode(array('success' => $result > 0, 'colis_id' => $colis->id));
+        echo json_encode(array('success' => $result > 0, 'colis_id' => isset($colis) ? $colis->id : 0));
         exit;
     }
     
@@ -359,13 +359,24 @@ class ActionsFicheProduction
         require_once DOL_DOCUMENT_ROOT.'/custom/ficheproduction/class/ficheproductioncolis.class.php';
         
         $colis_id = GETPOST('colis_id', 'int');
-        $line_id = GETPOST('line_id', 'int');
+        $product_id = GETPOST('product_id', 'int');
         
         $colis = new FicheProductionColis($this->db);
         $result = $colis->fetch($colis_id);
         
         if ($result > 0) {
-            $result = $colis->removeLine($line_id, $user);
+            // Find the line to remove
+            $line_id = 0;
+            foreach ($colis->lines as $line) {
+                if ($line->fk_product == $product_id) {
+                    $line_id = $line->id;
+                    break;
+                }
+            }
+            
+            if ($line_id > 0) {
+                $result = $colis->removeLine($line_id, $user);
+            }
         }
         
         // Return JSON response
@@ -384,14 +395,25 @@ class ActionsFicheProduction
         require_once DOL_DOCUMENT_ROOT.'/custom/ficheproduction/class/ficheproductioncolis.class.php';
         
         $colis_id = GETPOST('colis_id', 'int');
-        $line_id = GETPOST('line_id', 'int');
+        $product_id = GETPOST('product_id', 'int');
         $quantite = GETPOST('quantite', 'int');
         
         $colis = new FicheProductionColis($this->db);
         $result = $colis->fetch($colis_id);
         
         if ($result > 0) {
-            $result = $colis->updateLineQuantity($line_id, $quantite, $user);
+            // Find the line to update
+            $line_id = 0;
+            foreach ($colis->lines as $line) {
+                if ($line->fk_product == $product_id) {
+                    $line_id = $line->id;
+                    break;
+                }
+            }
+            
+            if ($line_id > 0) {
+                $result = $colis->updateLineQuantity($line_id, $quantite, $user);
+            }
         }
         
         // Return JSON response
@@ -482,6 +504,11 @@ class ActionsFicheProduction
         
         // Get order products
         if ($object->element == 'commande') {
+            // Fetch order lines if not already loaded
+            if (empty($object->lines)) {
+                $object->fetch_lines();
+            }
+            
             foreach ($object->lines as $line) {
                 if ($line->fk_product > 0) {
                     $product = new Product($this->db);
