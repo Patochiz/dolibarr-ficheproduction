@@ -208,18 +208,32 @@ class ActionsFicheProduction
 
         if (in_array($parameters['currentcontext'], array('ordercard'))) {
             if ($object->element == 'commande' && $object->id > 0) {
-                // Add ficheproduction tab
-                $langs->load("ficheproduction@ficheproduction");
-                
+                // Check if tab already exists to avoid duplicates
                 $head = $parameters['head'];
-                $h = count($head);
+                $tabAlreadyExists = false;
                 
-                $head[$h][0] = DOL_URL_ROOT.'/custom/ficheproduction/ficheproduction.php?id='.$object->id;
-                $head[$h][1] = $langs->trans('ProductionSheet');
-                $head[$h][2] = 'ficheproduction';
-                $h++;
+                if (is_array($head)) {
+                    foreach ($head as $tab) {
+                        if (isset($tab[2]) && $tab[2] == 'ficheproduction') {
+                            $tabAlreadyExists = true;
+                            break;
+                        }
+                    }
+                }
                 
-                $parameters['head'] = $head;
+                // Add ficheproduction tab only if it doesn't exist yet
+                if (!$tabAlreadyExists) {
+                    $langs->load("ficheproduction@ficheproduction");
+                    
+                    $h = count($head);
+                    
+                    $head[$h][0] = DOL_URL_ROOT.'/custom/ficheproduction/ficheproduction.php?id='.$object->id;
+                    $head[$h][1] = $langs->trans('ProductionSheet');
+                    $head[$h][2] = 'ficheproduction';
+                    $h++;
+                    
+                    $parameters['head'] = $head;
+                }
             }
         }
 
