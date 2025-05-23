@@ -1,0 +1,77 @@
+# Module label 'ModuleFicheProduction'
+ModuleFicheProduction = Fiche de Production
+# Module description 'ModuleFicheProductionDesc'
+ModuleFicheProductionDesc = Module de gestion des fiches de production et plans de colisage
+
+#
+# Page d'accueil
+#
+FicheProductionArea = Espace Fiche de Production
+MyFicheProduction = Ma fiche de production
+
+#
+# Page générale
+#
+FicheProduction = Fiche de Production
+ProductionSheet = Fiche de Production
+NewProductionSheet = Nouvelle fiche de production
+FicheProductionList = Liste des fiches de production
+
+#
+# Page configuration
+#
+FicheProductionSetup = Configuration du module Fiche de Production
+Settings = Paramètres
+FicheProductionSetupPage = Page de configuration du module Fiche de Production
+
+#
+# Page plan de colisage
+#
+PackagingPlan = Plan de Colisage
+CustomerOrder = Commande client
+OrderReference = Référence de la commande
+CustomerName = Client
+ProjectReference = Référence du chantier
+Comments = Commentaires
+TotalPackages = Total colis
+TotalWeight = Poids total
+ProductColumn = Produit
+NumberColumn = Nombre
+LengthColumn = Longueur
+WidthColumn = Largeur
+QuantityColumn = Quantité
+ColorColumn = Couleur
+RefColumn = Référence
+NumberOfPackages = Nombre de colis
+NumberOfItems = Nombre d'éléments
+AddButton = Ajouter
+DeleteButton = Supprimer
+DeleteAllButton = Tout supprimer
+SaveButton = Enregistrer
+PrintButton = Imprimer
+NoProducts = Aucun produit trouvé dans cette commande
+Module installed successfully = Module installé avec succès
+The first step has been implemented: summary table with editable fields. The next step will be to implement the product tables and jspreadsheet integration. = La première étape a été implémentée : tableau récapitulatif avec champs éditables. La prochaine étape sera d'implémenter les tableaux de produits et l'intégration de jspreadsheet.
+
+#
+# Page plan de colisage
+#
+DeliveryInformation = Informations de livraison
+Contact = Contact
+Address = Adresse
+Phone = Téléphone
+Email = Email
+
+# Final checks section
+FinalChecks = Vérifications finales
+FinalPackaging = COLISAGE FINAL
+ProductionSheetVerificationBy = Vérification Fiche de production par
+Pallets = PALETTE(S)
+Being = SOIT
+Packages = COLIS
+FinalCounting = Pointage final
+AndReturnDateBy = et date de retour par
+Bundles = FARDEAU(X)
+BulkPackages = COLIS VRAC
+TotalNumberOfPackages = NBR TOTAL DE COLIS
+CoilsIDUsed = ID BOBINE(S) UTILISÉE(S)

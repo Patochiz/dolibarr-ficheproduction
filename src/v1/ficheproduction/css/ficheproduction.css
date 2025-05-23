@@ -1,0 +1,178 @@
+/**
+ * Feuille de style pour le module Fiche de Production
+ */
+
+ .ficheproduction-container {
+    margin: 20px 0;
+}
+
+.ficheproduction-summary {
+    background-color: #f9f9f9;
+    border: 1px solid #ddd;
+    padding: 15px;
+    margin-bottom: 20px;
+    border-radius: 4px;
+}
+
+.ficheproduction-summary .field {
+    margin-bottom: 10px;
+}
+
+.ficheproduction-summary .field label {
+    font-weight: bold;
+    display: inline-block;
+    width: 200px;
+}
+
+.ficheproduction-product-table {
+    width: 100%;
+    margin-bottom: 20px;
+    border-collapse: collapse;
+}
+
+.ficheproduction-product-table th {
+    background-color: #f4f4f4;
+    text-align: left;
+    padding: 8px;
+    border: 1px solid #ddd;
+}
+
+.ficheproduction-product-table td {
+    padding: 8px;
+    border: 1px solid #ddd;
+}
+
+.ficheproduction-jspreadsheet-container {
+    margin-top: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 10px;
+}
+
+.ficheproduction-buttons {
+    margin: 15px 0;
+}
+
+.ficheproduction-buttons .button {
+    margin-right: 10px;
+}
+
+.product-group {
+    margin-top: 30px;
+    padding-top: 15px;
+    border-top: 1px solid #ddd;
+}
+
+.product-group h3 {
+    margin-bottom: 15px;
+    color: #333;
+}
+
+.product-tables-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+}
+
+.product-table-left {
+    flex: 1;
+    min-width: 300px;
+}
+
+.product-table-right {
+    flex: 2;
+    min-width: 500px;
+}
+
+/* Styles pour la comparaison des quantités */
+.quantity-compare {
+    margin-top: 10px;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-weight: bold;
+    display: inline-block;
+}
+
+.quantity-match {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.quantity-over {
+    background-color: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeeba;
+}
+
+.quantity-under {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+/* Styles pour l'impression */
+@media print {
+    /* Conserver vos règles d'origine qui fonctionnaient */
+    .butAction, .butActionDelete {
+        display: none;
+    }
+    
+    .ficheproduction-jspreadsheet-container {
+        border: none;
+        padding: 0;
+    }
+    
+    .ficheaddleft, .ficheaddright {
+        display: none;
+    }
+    
+    .tabBar {
+        border-top: none;
+    }
+    
+    /* Ajouter progressivement des règles pour masquer les éléments de Dolibarr */
+    /* Masquer les menus et la barre de navigation */
+    .fiche > .titre, .atoplogin, .tmenudiv, #id-top, .vmenu, .login_block,
+    .mainmenu, .tmenucenter, .tmenuleft, .tmenuright, .tmenufill {
+        display: none !important;
+    }
+    
+    /* Masquer boutons d'actions supplémentaires */
+    div.tabsAction, .tabsAction {
+        display: none !important;
+    }
+    
+    /* Optimiser l'affichage du contenu principal */
+    .fiche {
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+        box-shadow: none !important;
+        border: none !important;
+    }
+    
+    /* Assurer que la zone principale occupe tout l'espace */
+    .fichecenter {
+        margin: 0 !important;
+        padding: 10px !important;
+        width: 100% !important;
+    }
+    
+    /* Améliorer l'espacement entre les éléments */
+    .product-group {
+        page-break-inside: avoid;
+        margin-bottom: 20px;
+    }
+    
+    /* Optimiser l'apparence des tableaux AG Grid */
+    .ag-theme-alpine {
+        font-size: 11pt;
+    }
+    
+    /* S'assurer que le contenu est visible */
+    body, html {
+        background: white !important;
+        color: black !important;
+    }
+}
