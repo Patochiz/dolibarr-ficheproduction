@@ -221,9 +221,8 @@ dol_banner_tab($object, 'ref', $linkback, 1, 'ref', 'ref', $morehtmlref);
 
 print '<div class="fichecenter">';
 
-// Count products in order and display debug info
+// Count products in order
 $product_count = 0;
-$debug_info = array();
 if (!empty($object->lines)) {
     foreach ($object->lines as $line) {
         if ($line->fk_product > 0) {
@@ -231,34 +230,9 @@ if (!empty($object->lines)) {
             $temp_product->fetch($line->fk_product);
             if ($temp_product->type == 0) { // Only products, not services
                 $product_count++;
-                
-                // Debug: collect extrafield info
-                $quantity_nombre = isset($line->array_options['options_nombre']) ? $line->array_options['options_nombre'] : 'non défini';
-                $debug_info[] = array(
-                    'ref' => $temp_product->ref,
-                    'qty_standard' => $line->qty,
-                    'qty_nombre' => $quantity_nombre,
-                    'extrafields' => $line->array_options
-                );
             }
         }
     }
-}
-
-// DEBUG: Show extrafields information
-if (!empty($debug_info)) {
-    print '<div style="background: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 4px; font-size: 12px;">';
-    print '<strong>🔍 DEBUG - Informations extrafields par ligne de commande (ordre préservé) :</strong><br>';
-    foreach ($debug_info as $info) {
-        print "<strong>{$info['ref']}</strong> - Qté standard: {$info['qty_standard']}, Qté nombre: {$info['qty_nombre']}<br>";
-        if (!empty($info['extrafields'])) {
-            foreach ($info['extrafields'] as $key => $value) {
-                print "&nbsp;&nbsp;• <code>$key</code> = " . (is_null($value) ? 'null' : htmlspecialchars($value)) . "<br>";
-            }
-        }
-        print "<br>";
-    }
-    print '</div>';
 }
 ?>
 
@@ -289,7 +263,8 @@ if (!empty($debug_info)) {
 
         .colisage-container {
             display: flex;
-            height: 700px;
+            height: fit-content;
+            min-height: 700px;
             background: white;
             border-radius: 0 0 8px 8px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
@@ -303,6 +278,7 @@ if (!empty($debug_info)) {
             background: #fafafa;
             display: flex;
             flex-direction: column;
+            min-height: 700px;
         }
 
         .inventory-header {
@@ -375,6 +351,11 @@ if (!empty($debug_info)) {
             border-color: #ef5350;
         }
 
+        .product-item.in-colis {
+            width: 100% !important;
+            margin-bottom: 10px;
+        }
+
         .product-header {
             display: flex;
             justify-content: space-between;
@@ -437,11 +418,34 @@ if (!empty($debug_info)) {
             transition: width 0.3s;
         }
 
+        .quantity-input-container {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            margin-top: 8px;
+        }
+
+        .quantity-input-label {
+            font-size: 12px;
+            font-weight: bold;
+            color: #666;
+        }
+
+        .quantity-input {
+            width: 60px;
+            padding: 4px 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            text-align: center;
+            font-size: 12px;
+        }
+
         /* Zone Constructeur */
         .constructor-zone {
             width: 60%;
             display: flex;
             flex-direction: column;
+            min-height: 700px;
         }
 
         .constructor-header {
@@ -477,6 +481,7 @@ if (!empty($debug_info)) {
             min-height: 200px;
             flex: 1;
             overflow-y: auto;
+            max-height: 50vh;
         }
 
         .colis-table {
@@ -1047,7 +1052,7 @@ if (!empty($debug_info)) {
         }
 
         // Fonction pour créer une vignette produit (utilisée dans inventaire et colis)
-        function createProductVignette(product, isInColis = false) {
+        function createProductVignette(product, isInColis = false, currentQuantity = 1) {
             const available = product.total - product.used;
             const percentage = (product.used / product.total) * 100;
             let status = 'available';
@@ -1057,10 +1062,22 @@ if (!empty($debug_info)) {
 
             const vignetteElement = document.createElement('div');
             vignetteElement.className = `product-item ${status}`;
+            if (isInColis) {
+                vignetteElement.classList.add('in-colis');
+            }
             if (!isInColis) {
                 vignetteElement.draggable = status !== 'exhausted';
                 vignetteElement.dataset.productId = product.id;
             }
+
+            // Ajouter input de quantité pour les vignettes dans les colis
+            const quantityInputHtml = isInColis ? `
+                <div class="quantity-input-container">
+                    <span class="quantity-input-label">Qté:</span>
+                    <input type="number" class="quantity-input" value="${currentQuantity}" min="1" 
+                           data-product-id="${product.id}">
+                </div>
+            ` : '';
 
             vignetteElement.innerHTML = `
                 <div class="product-header">
@@ -1079,6 +1096,7 @@ if (!empty($debug_info)) {
                         <div class="quantity-progress" style="width: ${percentage}%"></div>
                     </div>
                 </div>
+                ${quantityInputHtml}
                 <div class="status-indicator ${status === 'exhausted' ? 'error' : status === 'partial' ? 'warning' : ''}"></div>
             `;
 
@@ -1208,11 +1226,6 @@ if (!empty($debug_info)) {
                 
                 debugLog(`Chargé ${products.length} produits dans l'ordre de la commande`);
                 debugLog(`Trouvé ${productGroups.length} groupes de produits`);
-                
-                // Debug: afficher l'ordre et les groupes
-                products.forEach(product => {
-                    debugLog(`Ordre ${product.line_order}: ${product.ref} (${product.name} - ${product.color})`);
-                });
                 
                 populateProductGroupSelector();
                 renderInventory();
@@ -1740,35 +1753,6 @@ if (!empty($debug_info)) {
                     </span>
                 </div>` : '';
 
-            const vignetteContainer = document.createElement('div');
-            vignetteContainer.style.display = 'flex';
-            vignetteContainer.style.flexWrap = 'wrap';
-            vignetteContainer.style.gap = '10px';
-            vignetteContainer.style.marginBottom = '20px';
-
-            selectedColis.products.forEach((p, index) => {
-                const product = products.find(prod => prod.id === p.productId);
-                if (!product) return;
-
-                // Créer une vignette identique à l'inventaire
-                const vignette = createProductVignette(product, true);
-                vignette.style.width = '200px'; // Taille fixe pour la zone de drop
-                vignette.style.marginBottom = '0';
-                
-                // Ajouter bouton supprimer
-                const removeBtn = document.createElement('button');
-                removeBtn.className = 'btn-remove-line';
-                removeBtn.textContent = '✕';
-                removeBtn.dataset.productId = p.productId;
-                removeBtn.style.position = 'absolute';
-                removeBtn.style.top = '5px';
-                removeBtn.style.left = '5px';
-                vignette.style.position = 'relative';
-                vignette.appendChild(removeBtn);
-
-                vignetteContainer.appendChild(vignette);
-            });
-
             container.innerHTML = `
                 <div class="colis-detail-header">
                     <h3 class="colis-detail-title">📦 Colis ${selectedColis.number}</h3>
@@ -1800,7 +1784,26 @@ if (!empty($debug_info)) {
             // Ajouter les vignettes dans la zone de contenu
             const colisContent = document.getElementById('colisContent');
             if (selectedColis.products.length > 0) {
-                colisContent.appendChild(vignetteContainer);
+                selectedColis.products.forEach((p, index) => {
+                    const product = products.find(prod => prod.id === p.productId);
+                    if (!product) return;
+
+                    // Créer une vignette identique à l'inventaire avec input quantité
+                    const vignette = createProductVignette(product, true, p.quantity);
+                    
+                    // Ajouter bouton supprimer
+                    const removeBtn = document.createElement('button');
+                    removeBtn.className = 'btn-remove-line';
+                    removeBtn.textContent = '✕';
+                    removeBtn.dataset.productId = p.productId;
+                    removeBtn.style.position = 'absolute';
+                    removeBtn.style.top = '5px';
+                    removeBtn.style.left = '5px';
+                    vignette.style.position = 'relative';
+                    vignette.appendChild(removeBtn);
+
+                    colisContent.appendChild(vignette);
+                });
             }
 
             // Event listeners pour les boutons et inputs
@@ -1833,6 +1836,15 @@ if (!empty($debug_info)) {
                     const productId = parseInt(e.target.dataset.productId);
                     debugLog(`Bouton supprimer ligne cliqué pour produit ${productId}`);
                     removeProductFromColis(selectedColis.id, productId);
+                });
+            });
+
+            // Inputs quantité (sur les vignettes)
+            const quantityInputs = container.querySelectorAll('.quantity-input');
+            quantityInputs.forEach(input => {
+                input.addEventListener('change', async (e) => {
+                    const productId = parseInt(e.target.dataset.productId);
+                    await updateProductQuantity(selectedColis.id, productId, e.target.value);
                 });
             });
 
@@ -1971,7 +1983,7 @@ if (!empty($debug_info)) {
         // Initialisation
         document.addEventListener('DOMContentLoaded', function() {
             debugLog('DOM chargé, initialisation...');
-            debugLog('🔧 CONFIGURATION: Ordre commande + groupes par libellé+couleur + vignettes identiques');
+            debugLog('🔧 CONFIGURATION: Interface épurée + vignettes 100% + inputs quantité');
             
             renderInventory();
             renderColisOverview();
