@@ -61,6 +61,15 @@ if (!empty($action) && strpos($action, 'ficheproduction_') === 0) {
                             $product = new Product($db);
                             if ($product->fetch($line->fk_product) > 0 && $product->type == 0) {
                                 
+                                // Get quantity from extrafield "nombre" instead of qty
+                                $quantity = 0;
+                                if (isset($line->array_options['options_nombre']) && !empty($line->array_options['options_nombre'])) {
+                                    $quantity = intval($line->array_options['options_nombre']);
+                                } else {
+                                    // Fallback to standard qty if nombre is not set
+                                    $quantity = intval($line->qty);
+                                }
+                                
                                 // Get dimensions from line extrafields
                                 $length = 1000; // default
                                 $width = 100;   // default
@@ -93,17 +102,21 @@ if (!empty($action) && strpos($action, 'ficheproduction_') === 0) {
                                     }
                                 }
                                 
-                                $data['products'][] = array(
-                                    'id' => $productIndex++,
-                                    'ref' => $product->ref,
-                                    'name' => $product->label,
-                                    'color' => $color,
-                                    'weight' => (!empty($product->weight) ? $product->weight : 1.0),
-                                    'length' => $length,
-                                    'width' => $width,
-                                    'total' => $line->qty,
-                                    'used' => 0
-                                );
+                                // Only add products with quantity > 0
+                                if ($quantity > 0) {
+                                    $data['products'][] = array(
+                                        'id' => $productIndex++,
+                                        'ref' => $product->ref,
+                                        'name' => $product->label,
+                                        'color' => $color,
+                                        'weight' => (!empty($product->weight) ? $product->weight : 1.0),
+                                        'length' => $length,
+                                        'width' => $width,
+                                        'total' => $quantity, // Using extrafield "nombre" as total available
+                                        'used' => 0,
+                                        'line_id' => $line->id // Store line ID for future reference
+                                    );
+                                }
                             }
                         }
                     }
@@ -188,8 +201,9 @@ dol_banner_tab($object, 'ref', $linkback, 1, 'ref', 'ref', $morehtmlref);
 
 print '<div class="fichecenter">';
 
-// Count products in order
+// Count products in order and display debug info
 $product_count = 0;
+$debug_info = array();
 if (!empty($object->lines)) {
     foreach ($object->lines as $line) {
         if ($line->fk_product > 0) {
@@ -197,9 +211,34 @@ if (!empty($object->lines)) {
             $temp_product->fetch($line->fk_product);
             if ($temp_product->type == 0) { // Only products, not services
                 $product_count++;
+                
+                // Debug: collect extrafield info
+                $quantity_nombre = isset($line->array_options['options_nombre']) ? $line->array_options['options_nombre'] : 'non défini';
+                $debug_info[] = array(
+                    'ref' => $temp_product->ref,
+                    'qty_standard' => $line->qty,
+                    'qty_nombre' => $quantity_nombre,
+                    'extrafields' => $line->array_options
+                );
             }
         }
     }
+}
+
+// DEBUG: Show extrafields information
+if (!empty($debug_info)) {
+    print '<div style="background: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 4px; font-size: 12px;">';
+    print '<strong>🔍 DEBUG - Informations extrafields par ligne de commande :</strong><br>';
+    foreach ($debug_info as $info) {
+        print "<strong>{$info['ref']}</strong> - Qté standard: {$info['qty_standard']}, Qté nombre: {$info['qty_nombre']}<br>";
+        if (!empty($info['extrafields'])) {
+            foreach ($info['extrafields'] as $key => $value) {
+                print "&nbsp;&nbsp;• <code>$key</code> = " . (is_null($value) ? 'null' : htmlspecialchars($value)) . "<br>";
+            }
+        }
+        print "<br>";
+    }
+    print '</div>';
 }
 ?>
 
@@ -339,6 +378,13 @@ if (!empty($object->lines)) {
         .product-name {
             color: #333;
             margin-bottom: 8px;
+        }
+
+        .product-quantity-source {
+            font-size: 10px;
+            color: #666;
+            font-style: italic;
+            margin-bottom: 4px;
         }
 
         .quantity-info {
@@ -877,7 +923,7 @@ if (!empty($object->lines)) {
     <!-- Zone Inventaire -->
     <div class="inventory-zone">
         <div class="inventory-header">
-            📦 Inventaire Produits
+            📦 Inventaire Produits (basé sur extrafield "nombre")
         </div>
         
         <div class="inventory-controls">
@@ -1103,12 +1149,18 @@ if (!empty($object->lines)) {
         }
 
         async function loadData() {
-            debugLog('Chargement des données...');
+            debugLog('Chargement des données (avec extrafield nombre)...');
             const result = await apiCall('ficheproduction_get_data');
             
             if (result && result.products) {
                 products = result.products;
-                debugLog(`Chargé ${products.length} produits`);
+                debugLog(`Chargé ${products.length} produits avec quantités basées sur extrafield "nombre"`);
+                
+                // Debug: afficher les quantités récupérées
+                products.forEach(product => {
+                    debugLog(`${product.ref}: ${product.total} unités disponibles (source: extrafield nombre)`);
+                });
+                
                 renderInventory();
             } else {
                 debugLog('Erreur lors du chargement des données');
@@ -1192,7 +1244,7 @@ if (!empty($object->lines)) {
                 if (product) {
                     const quantityToRestore = p.quantity * coliData.multiple;
                     product.used -= quantityToRestore;
-                    debugLog(`Remise en stock: ${product.ref} +${quantityToRestore}`);
+                    debugLog(`Remise en stock extrafield "nombre": ${product.ref} +${quantityToRestore}`);
                 }
             });
 
@@ -1267,14 +1319,14 @@ if (!empty($object->lines)) {
                 if (product) {
                     product.used += p.quantity * multipleDiff;
                     
-                    // Vérifier qu'on ne dépasse pas le total disponible
+                    // Vérifier qu'on ne dépasse pas le total disponible (extrafield nombre)
                     if (product.used > product.total) {
-                        await showConfirm(`Attention: ${product.ref} - Quantité dépassée! Utilisé: ${product.used}, Total: ${product.total}`);
+                        await showConfirm(`Attention: ${product.ref} - Quantité dépassée! Utilisé: ${product.used}, Total (extrafield nombre): ${product.total}`);
                         // Revenir à l'ancienne valeur
                         product.used -= p.quantity * multipleDiff;
                         return;
                     }
-                    debugLog(`Mise à jour stock ${product.ref}: ${product.used}/${product.total}`);
+                    debugLog(`Mise à jour stock ${product.ref}: ${product.used}/${product.total} (extrafield nombre)`);
                 }
             }
 
@@ -1302,7 +1354,7 @@ if (!empty($object->lines)) {
             const product = products.find(p => p.id === productId);
             if (product) {
                 product.used -= productInColis.quantity * coliData.multiple;
-                debugLog(`Remise en stock: ${product.ref} +${productInColis.quantity * coliData.multiple}`);
+                debugLog(`Remise en stock extrafield "nombre": ${product.ref} +${productInColis.quantity * coliData.multiple}`);
             }
 
             // Supprimer le produit du colis
@@ -1340,7 +1392,7 @@ if (!empty($object->lines)) {
             const available = product.total - product.used;
             
             if (totalQuantityNeeded > available) {
-                alert(`Quantité insuffisante ! Disponible: ${available}, Besoin: ${totalQuantityNeeded}`);
+                alert(`Quantité insuffisante ! Disponible (extrafield nombre): ${available}, Besoin: ${totalQuantityNeeded}`);
                 // Remettre l'ancienne valeur dans l'input
                 const input = document.querySelector(`input[data-product-id="${productId}"]`);
                 if (input) input.value = oldQuantity;
@@ -1354,6 +1406,8 @@ if (!empty($object->lines)) {
 
             // Recalculer le poids total
             coliData.totalWeight = coliData.products.reduce((sum, p) => sum + p.weight, 0);
+
+            debugLog(`Quantité mise à jour ${product.ref}: ${product.used}/${product.total} (extrafield nombre)`);
 
             // Re-render
             renderInventory();
@@ -1407,6 +1461,7 @@ if (!empty($object->lines)) {
                         <span class="product-color">${product.color}</span>
                     </div>
                     <div class="product-name">${product.name}</div>
+                    <div class="product-quantity-source">Quantité source: extrafield "nombre"</div>
                     <div style="font-size: 11px; color: #666; margin: 4px 0;">
                         L: ${product.length}mm × l: ${product.width}mm
                     </div>
@@ -1432,7 +1487,7 @@ if (!empty($object->lines)) {
                     draggedProduct = product;
                     this.classList.add('dragging');
                     e.dataTransfer.effectAllowed = 'copy';
-                    debugLog(`🚀 Drag start: ${product.ref}`);
+                    debugLog(`🚀 Drag start: ${product.ref} (${product.total} unités extrafield "nombre")`);
                     
                     // Activer les zones de drop après un délai pour laisser le temps au dragstart de s'exécuter
                     setTimeout(() => {
@@ -1568,7 +1623,7 @@ if (!empty($object->lines)) {
                             editBtn.addEventListener('click', async (e) => {
                                 e.stopPropagation();
                                 const newQuantity = await showPrompt(
-                                    `Nouvelle quantité pour ${product.ref} :`,
+                                    `Nouvelle quantité pour ${product.ref} :\n(Stock disponible extrafield "nombre": ${product.total - product.used})`,
                                     productInColis.quantity.toString()
                                 );
                                 if (newQuantity !== null && !isNaN(newQuantity) && parseInt(newQuantity) > 0) {
@@ -1617,7 +1672,7 @@ if (!empty($object->lines)) {
                 e.stopPropagation();
                 
                 if (draggedProduct && isDragging) {
-                    debugLog(`📍 Drop sur colis ${colisId} - Produit: ${draggedProduct.ref}`);
+                    debugLog(`📍 Drop sur colis ${colisId} - Produit: ${draggedProduct.ref} (quantité extrafield "nombre": ${draggedProduct.total})`);
                     addProductToColis(colisId, draggedProduct.id, 1);
                 } else {
                     debugLog(`❌ Drop échoué - draggedProduct: ${!!draggedProduct}, isDragging: ${isDragging}`);
@@ -1772,10 +1827,10 @@ if (!empty($object->lines)) {
                 return;
             }
 
-            // Vérifier la disponibilité
+            // Vérifier la disponibilité (basée sur extrafield "nombre")
             const available = product.total - product.used;
             if (available < quantity) {
-                alert(`Quantité insuffisante ! Disponible: ${available}, Demandé: ${quantity}`);
+                alert(`Quantité insuffisante ! Disponible (extrafield "nombre"): ${available}, Demandé: ${quantity}`);
                 return;
             }
 
@@ -1800,7 +1855,7 @@ if (!empty($object->lines)) {
 
             // Mettre à jour les quantités utilisées (tenir compte des multiples)
             product.used += quantity * coliData.multiple;
-            debugLog(`📊 Stock mis à jour ${product.ref}: ${product.used}/${product.total}`);
+            debugLog(`📊 Stock mis à jour ${product.ref}: ${product.used}/${product.total} (extrafield nombre)`);
 
             // Re-render
             renderInventory();
@@ -1898,6 +1953,7 @@ if (!empty($object->lines)) {
         // Initialisation
         document.addEventListener('DOMContentLoaded', function() {
             debugLog('DOM chargé, initialisation...');
+            debugLog('🔧 CONFIGURATION: Utilisation de l\'extrafield "nombre" pour les quantités');
             
             renderInventory();
             renderColisOverview();
