@@ -286,7 +286,10 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
     <div class="constructor-zone">
         <div class="constructor-header">
             <div class="constructor-title">🏗️ Constructeur de Colis</div>
-            <button class="btn-add-colis" id="addNewColisBtn">+ Nouveau Colis</button>
+            <div class="constructor-buttons">
+                <button class="btn-add-colis" id="addNewColisBtn">+ Nouveau Colis</button>
+                <button class="btn-add-colis-libre" id="addNewColisLibreBtn">📦 Colis Libre</button>
+            </div>
         </div>
         
         <div class="colis-overview" id="colisOverview">
@@ -343,6 +346,27 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
     </div>
 </div>
 
+<!-- Modale Colis Libre -->
+<div class="modal-overlay" id="colisLibreModal">
+    <div class="modal-content modal-large">
+        <div class="modal-header">📦 Création Colis Libre</div>
+        <div class="modal-message">Ajout d'éléments libres (échantillons, catalogues, etc.)</div>
+        
+        <div class="colis-libre-form">
+            <h4>Contenu du colis libre :</h4>
+            <div id="colisLibreItems">
+                <!-- Items générés par JavaScript -->
+            </div>
+            <button type="button" class="btn-add-item" id="addColisLibreItem">+ Ajouter un élément</button>
+        </div>
+        
+        <div class="modal-buttons">
+            <button class="modal-btn secondary" id="colisLibreCancel">Annuler</button>
+            <button class="modal-btn primary" id="colisLibreOk">Créer le colis</button>
+        </div>
+    </div>
+</div>
+
 <script>
         // Variables globales
         let products = [];
@@ -371,6 +395,42 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
 
         // Fonction pour créer une vignette produit (utilisée dans inventaire et colis)
         function createProductVignette(product, isInColis = false, currentQuantity = 1) {
+            // Gestion des produits libres (pas de contraintes de stock)
+            if (product.isLibre) {
+                const vignetteElement = document.createElement('div');
+                vignetteElement.className = 'product-item libre-item';
+                if (isInColis) {
+                    vignetteElement.classList.add('in-colis');
+                }
+
+                const quantityInputHtml = isInColis ? `
+                    <div class="quantity-input-container">
+                        <span class="quantity-input-label">Qté:</span>
+                        <input type="number" class="quantity-input" value="${currentQuantity}" min="1" 
+                               data-product-id="${product.id}">
+                    </div>
+                ` : '';
+
+                vignetteElement.innerHTML = `
+                    <div class="product-header">
+                        <span class="product-ref">${product.name}</span>
+                        <span class="product-color libre-badge">LIBRE</span>
+                    </div>
+                    
+                    <div class="product-dimensions">
+                        Poids unitaire: ${product.weight}kg
+                    </div>
+                    <div class="quantity-info">
+                        <span class="libre-info">📦 Élément libre</span>
+                    </div>
+                    ${quantityInputHtml}
+                    <div class="status-indicator libre"></div>
+                `;
+
+                return vignetteElement;
+            }
+
+            // Produits normaux (existant)
             const available = product.total - product.used;
             const percentage = (product.used / product.total) * 100;
             let status = 'available';
@@ -419,6 +479,132 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
             `;
 
             return vignetteElement;
+        }
+
+        // Fonction pour créer un produit libre
+        function createLibreProduct(name, weight, quantity = 1) {
+            const newId = Math.max(...products.map(p => p.id), 10000) + 1;
+            return {
+                id: newId,
+                name: name,
+                weight: parseFloat(weight),
+                isLibre: true,
+                total: 9999, // Pas de limite pour les produits libres
+                used: 0
+            };
+        }
+
+        // Modale Colis Libre
+        function showColisLibreModal() {
+            const modal = document.getElementById('colisLibreModal');
+            const itemsContainer = document.getElementById('colisLibreItems');
+            
+            // Réinitialiser le contenu
+            itemsContainer.innerHTML = '';
+            addColisLibreItem(); // Ajouter un premier élément
+
+            modal.classList.add('show');
+        }
+
+        function addColisLibreItem() {
+            const container = document.getElementById('colisLibreItems');
+            const itemId = Date.now();
+            
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'colis-libre-item';
+            itemDiv.dataset.itemId = itemId;
+            
+            itemDiv.innerHTML = `
+                <div class="colis-libre-fields">
+                    <input type="text" class="libre-name" placeholder="Nom de l'élément (ex: Échantillon Bleu)" required>
+                    <input type="number" class="libre-weight" placeholder="Poids (kg)" step="0.1" min="0" value="0.5" required>
+                    <input type="number" class="libre-quantity" placeholder="Quantité" min="1" value="1" required>
+                    <button type="button" class="btn-remove-libre-item">✕</button>
+                </div>
+            `;
+            
+            // Event listener pour supprimer l'élément
+            const removeBtn = itemDiv.querySelector('.btn-remove-libre-item');
+            removeBtn.addEventListener('click', () => {
+                itemDiv.remove();
+                // S'assurer qu'il reste au moins un élément
+                if (container.children.length === 0) {
+                    addColisLibreItem();
+                }
+            });
+            
+            container.appendChild(itemDiv);
+        }
+
+        async function createColisLibre() {
+            const items = document.querySelectorAll('.colis-libre-item');
+            const libreProducts = [];
+            
+            // Valider et récupérer les données
+            for (const item of items) {
+                const name = item.querySelector('.libre-name').value.trim();
+                const weight = parseFloat(item.querySelector('.libre-weight').value);
+                const quantity = parseInt(item.querySelector('.libre-quantity').value);
+                
+                if (!name || isNaN(weight) || weight < 0 || isNaN(quantity) || quantity < 1) {
+                    await showConfirm('Veuillez remplir correctement tous les champs.');
+                    return false;
+                }
+                
+                libreProducts.push({
+                    name: name,
+                    weight: weight,
+                    quantity: quantity
+                });
+            }
+            
+            if (libreProducts.length === 0) {
+                await showConfirm('Veuillez ajouter au moins un élément.');
+                return false;
+            }
+            
+            // Créer le colis libre
+            const newId = Math.max(...colis.map(c => c.id), 0) + 1;
+            const newNumber = Math.max(...colis.map(c => c.number), 0) + 1;
+            
+            const newColis = {
+                id: newId,
+                number: newNumber,
+                products: [],
+                totalWeight: 0,
+                maxWeight: 25,
+                status: 'ok',
+                multiple: 1,
+                isLibre: true // Marquer comme colis libre
+            };
+
+            // Ajouter chaque produit libre au colis
+            libreProducts.forEach(libreData => {
+                // Créer le produit libre et l'ajouter à la liste globale
+                const libreProduct = createLibreProduct(libreData.name, libreData.weight);
+                products.push(libreProduct);
+                
+                // Ajouter au colis
+                newColis.products.push({
+                    productId: libreProduct.id,
+                    quantity: libreData.quantity,
+                    weight: libreData.quantity * libreProduct.weight
+                });
+            });
+
+            // Recalculer le poids total
+            newColis.totalWeight = newColis.products.reduce((sum, p) => sum + p.weight, 0);
+
+            colis.push(newColis);
+            
+            debugLog(`Colis libre créé avec ${libreProducts.length} éléments`);
+            
+            // Re-render et sélectionner le nouveau colis
+            renderInventory();
+            renderColisOverview();
+            selectColis(newColis);
+            
+            return true;
         }
 
         // Fonction de tri des produits
@@ -646,7 +832,8 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
                 totalWeight: 0,
                 maxWeight: 25,
                 status: 'ok',
-                multiple: 1
+                multiple: 1,
+                isLibre: false
             };
 
             colis.push(newColis);
@@ -672,15 +859,26 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
             
             debugLog(`Suppression colis: ${JSON.stringify(coliData)}`);
             
-            // Remettre tous les produits dans l'inventaire
+            // Remettre tous les produits dans l'inventaire (sauf les produits libres)
             coliData.products.forEach(p => {
                 const product = products.find(prod => prod.id === p.productId);
-                if (product) {
+                if (product && !product.isLibre) {
                     const quantityToRestore = p.quantity * coliData.multiple;
                     product.used -= quantityToRestore;
                     debugLog(`Remise en stock extrafield "nombre": ${product.ref} +${quantityToRestore}`);
                 }
             });
+
+            // Supprimer les produits libres de la liste globale
+            if (coliData.isLibre) {
+                coliData.products.forEach(p => {
+                    const productIndex = products.findIndex(prod => prod.id === p.productId && prod.isLibre);
+                    if (productIndex > -1) {
+                        products.splice(productIndex, 1);
+                        debugLog(`Produit libre supprimé: ${p.productId}`);
+                    }
+                });
+            }
 
             // Supprimer le colis
             const colisIndex = colis.findIndex(c => c.id === colisId);
@@ -747,10 +945,10 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
             const multipleDiff = newMultiple - oldMultiple;
             debugLog(`Différence multiple: ${multipleDiff}`);
             
-            // Mettre à jour les quantités utilisées pour chaque produit
+            // Mettre à jour les quantités utilisées pour chaque produit (sauf libres)
             for (const p of coliData.products) {
                 const product = products.find(prod => prod.id === p.productId);
-                if (product) {
+                if (product && !product.isLibre) {
                     product.used += p.quantity * multipleDiff;
                     
                     // Vérifier qu'on ne dépasse pas le total disponible (extrafield nombre)
@@ -784,9 +982,9 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
                 return;
             }
 
-            // Remettre les quantités dans l'inventaire (tenir compte des multiples)
+            // Remettre les quantités dans l'inventaire (tenir compte des multiples) sauf pour les produits libres
             const product = products.find(p => p.id === productId);
-            if (product) {
+            if (product && !product.isLibre) {
                 product.used -= productInColis.quantity * coliData.multiple;
                 debugLog(`Remise en stock extrafield "nombre": ${product.ref} +${productInColis.quantity * coliData.multiple}`);
             }
@@ -821,7 +1019,24 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
             const oldQuantity = productInColis.quantity;
             const quantityDiff = parseInt(newQuantity) - oldQuantity;
 
-            // Vérifier la disponibilité (tenir compte des multiples)
+            // Pour les produits libres, pas de vérification de stock
+            if (product.isLibre) {
+                productInColis.quantity = parseInt(newQuantity);
+                productInColis.weight = productInColis.quantity * product.weight;
+                
+                // Recalculer le poids total
+                coliData.totalWeight = coliData.products.reduce((sum, p) => sum + p.weight, 0);
+                
+                debugLog(`Quantité mise à jour pour produit libre ${product.name}: ${productInColis.quantity}`);
+                
+                // Re-render
+                renderInventory();
+                renderColisOverview();
+                renderColisDetail();
+                return;
+            }
+
+            // Vérifier la disponibilité (tenir compte des multiples) pour les produits normaux
             const totalQuantityNeeded = quantityDiff * coliData.multiple;
             const available = product.total - product.used;
             
@@ -853,12 +1068,12 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
             const container = document.getElementById('inventoryList');
             container.innerHTML = '';
 
-            // Filtrer les produits selon le groupe sélectionné
-            let filteredProducts = products;
+            // Filtrer les produits selon le groupe sélectionné (exclure les produits libres)
+            let filteredProducts = products.filter(p => !p.isLibre);
             if (currentProductGroup !== 'all') {
                 const selectedGroup = productGroups.find(g => g.key === currentProductGroup);
                 if (selectedGroup) {
-                    filteredProducts = products.filter(product => selectedGroup.products.includes(product.id));
+                    filteredProducts = filteredProducts.filter(product => selectedGroup.products.includes(product.id));
                     debugLog(`Filtrage par groupe "${currentProductGroup}": ${filteredProducts.length} produits`);
                 }
             }
@@ -928,6 +1143,9 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
                 // Ligne d'en-tête pour le colis - NOUVEAU FORMAT
                 const headerRow = document.createElement('tr');
                 headerRow.className = 'colis-group-header';
+                if (c.isLibre) {
+                    headerRow.classList.add('colis-libre');
+                }
                 headerRow.dataset.colisId = c.id;
                 if (selectedColis && selectedColis.id === c.id) {
                     headerRow.classList.add('selected');
@@ -936,12 +1154,13 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
                 // Calcul des textes pour l'affichage gauche/droite
                 const totalColis = c.multiple; // Nombre total de colis identiques
                 const leftText = totalColis > 1 ? `${totalColis} colis` : '1 colis';
-                const rightText = `Colis ${c.number} (${c.products.length} produit${c.products.length > 1 ? 's' : ''}) - ${c.totalWeight.toFixed(1)} Kg ${statusIcon}`;
+                const colisType = c.isLibre ? 'LIBRE' : c.number;
+                const rightText = `Colis ${colisType} (${c.products.length} produit${c.products.length > 1 ? 's' : ''}) - ${c.totalWeight.toFixed(1)} Kg ${statusIcon}`;
 
                 headerRow.innerHTML = `
                     <td colspan="6">
                         <div class="colis-header-content">
-                            <span class="colis-header-left">📦 ${leftText}</span>
+                            <span class="colis-header-left">${c.isLibre ? '📦' : '📦'} ${leftText}</span>
                             <span class="colis-header-right">${rightText}</span>
                         </div>
                     </td>
@@ -952,23 +1171,30 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
                     selectColis(c);
                 });
 
-                // Setup drop zone pour l'en-tête du colis
-                setupDropZone(headerRow, c.id);
+                // Setup drop zone pour l'en-tête du colis (seulement pour colis normaux)
+                if (!c.isLibre) {
+                    setupDropZone(headerRow, c.id);
+                }
                 tbody.appendChild(headerRow);
 
                 // Lignes pour chaque produit dans le colis
                 if (c.products.length === 0) {
                     const emptyRow = document.createElement('tr');
                     emptyRow.className = 'colis-group-item';
+                    if (c.isLibre) {
+                        emptyRow.classList.add('colis-libre');
+                    }
                     emptyRow.dataset.colisId = c.id;
                     emptyRow.innerHTML = `
                         <td></td>
                         <td colspan="5" style="font-style: italic; color: #999; padding: 10px;">
-                            Colis vide - Glissez des produits ici
+                            Colis vide - ${c.isLibre ? 'Colis libre sans éléments' : 'Glissez des produits ici'}
                         </td>
                     `;
                     
-                    setupDropZone(emptyRow, c.id);
+                    if (!c.isLibre) {
+                        setupDropZone(emptyRow, c.id);
+                    }
                     tbody.appendChild(emptyRow);
                 } else {
                     c.products.forEach((productInColis, index) => {
@@ -977,15 +1203,27 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
 
                         const productRow = document.createElement('tr');
                         productRow.className = 'colis-group-item';
+                        if (c.isLibre) {
+                            productRow.classList.add('colis-libre');
+                        }
                         productRow.dataset.colisId = c.id;
                         productRow.dataset.productId = product.id;
+
+                        // Affichage différent pour les produits libres
+                        const dimensionsDisplay = product.isLibre ? 
+                            `Poids unit.: ${product.weight}kg` : 
+                            `${product.length}×${product.width}`;
+
+                        const colorDisplay = product.isLibre ? 
+                            'LIBRE' : 
+                            product.color;
 
                         productRow.innerHTML = `
                             <td></td>
                             <td>
                                 <div class="product-label">
                                     <span>${product.name}</span>
-                                    <span class="product-color-badge">${product.color}</span>
+                                    <span class="product-color-badge ${product.isLibre ? 'libre-badge' : ''}">${colorDisplay}</span>
                                 </div>
                                 ${product.ref_ligne ? `<div style="font-size: 10px; color: #888; font-style: italic;">Réf: ${product.ref_ligne}</div>` : ''}
                             </td>
@@ -994,7 +1232,7 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
                                 ${c.multiple > 1 ? `<div style="font-size: 10px; color: #666;">×${c.multiple} = ${productInColis.quantity * c.multiple}</div>` : ''}
                             </td>
                             <td style="font-weight: bold; text-align: left; vertical-align: top;">
-                                ${product.length}×${product.width}
+                                ${dimensionsDisplay}
                                 <div style="font-size: 10px; color: #666;">${productInColis.weight.toFixed(1)}kg</div>
                             </td>
                             <td class="${statusClass}" style="text-align: center;">
@@ -1018,12 +1256,13 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
                         if (editBtn) {
                             editBtn.addEventListener('click', async (e) => {
                                 e.stopPropagation();
+                                const stockInfo = product.isLibre ? '' : `\n(Stock disponible extrafield "nombre": ${product.total - product.used})`;
                                 const newQuantity = await showPrompt(
-                                    `Nouvelle quantité pour ${product.ref} :\n(Stock disponible extrafield "nombre": ${product.total - product.used})`,
+                                    `Nouvelle quantité pour ${product.name} :${stockInfo}`,
                                     productInColis.quantity.toString()
                                 );
                                 if (newQuantity !== null && !isNaN(newQuantity) && parseInt(newQuantity) > 0) {
-                                    await updateProductQuantity(c.id, product.id, parseInt(newQuantity));
+                                    updateProductQuantity(c.id, product.id, parseInt(newQuantity));
                                 }
                             });
                         }
@@ -1032,7 +1271,7 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
                             deleteBtn.addEventListener('click', async (e) => {
                                 e.stopPropagation();
                                 const confirmed = await showConfirm(
-                                    `Supprimer ${product.ref} du colis ${c.number} ?`
+                                    `Supprimer ${product.name} du colis ${c.isLibre ? 'libre' : c.number} ?`
                                 );
                                 if (confirmed) {
                                     removeProductFromColis(c.id, product.id);
@@ -1047,7 +1286,9 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
                             });
                         }
 
-                        setupDropZone(productRow, c.id);
+                        if (!c.isLibre) {
+                            setupDropZone(productRow, c.id);
+                        }
                         tbody.appendChild(productRow);
                     });
                 }
@@ -1107,9 +1348,12 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
                     </span>
                 </div>` : '';
 
+            const colisTypeText = selectedColis.isLibre ? 'Colis Libre' : `Colis ${selectedColis.number}`;
+            const colisTypeIcon = selectedColis.isLibre ? '📦🆓' : '📦';
+
             container.innerHTML = `
                 <div class="colis-detail-header">
-                    <h3 class="colis-detail-title">📦 Colis ${selectedColis.number}</h3>
+                    <h3 class="colis-detail-title">${colisTypeIcon} ${colisTypeText}</h3>
                     <button class="btn-delete-colis" id="deleteColisBtn">🗑️ Supprimer</button>
                 </div>
 
@@ -1130,7 +1374,7 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
                 <div style="margin-bottom: 10px; font-weight: bold;">Produits dans ce colis:</div>
                 <div class="colis-content" id="colisContent" style="border: 2px dashed #ddd; border-radius: 8px; min-height: 150px; padding: 15px; position: relative;">
                     <div class="drop-hint" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #999; font-style: italic; pointer-events: none;">
-                        ${selectedColis.products.length === 0 ? 'Glissez un produit ici pour l\'ajouter' : ''}
+                        ${selectedColis.products.length === 0 ? (selectedColis.isLibre ? 'Colis libre vide' : 'Glissez un produit ici pour l\'ajouter') : ''}
                     </div>
                 </div>
             `;
@@ -1198,12 +1442,12 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
             quantityInputs.forEach(input => {
                 input.addEventListener('change', async (e) => {
                     const productId = parseInt(e.target.dataset.productId);
-                    await updateProductQuantity(selectedColis.id, productId, e.target.value);
+                    updateProductQuantity(selectedColis.id, productId, e.target.value);
                 });
             });
 
-            // Setup drop zone pour le contenu du colis
-            if (colisContent) {
+            // Setup drop zone pour le contenu du colis (seulement pour colis normaux)
+            if (colisContent && !selectedColis.isLibre) {
                 setupDropZone(colisContent, selectedColis.id);
             }
         }
@@ -1216,6 +1460,12 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
             
             if (!coliData || !product) {
                 debugLog('ERREUR: Colis ou produit non trouvé');
+                return;
+            }
+
+            // Ne pas permettre d'ajouter des produits normaux aux colis libres
+            if (coliData.isLibre) {
+                alert('Impossible d\'ajouter des produits de la commande à un colis libre.');
                 return;
             }
 
@@ -1330,6 +1580,40 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
                 });
             }
 
+            // Bouton Nouveau Colis Libre
+            const addNewColisLibreBtn = document.getElementById('addNewColisLibreBtn');
+            if (addNewColisLibreBtn) {
+                addNewColisLibreBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    debugLog('Bouton nouveau colis libre cliqué');
+                    showColisLibreModal();
+                });
+            }
+
+            // Event listeners pour la modale colis libre
+            const colisLibreOk = document.getElementById('colisLibreOk');
+            const colisLibreCancel = document.getElementById('colisLibreCancel');
+            const addColisLibreItemBtn = document.getElementById('addColisLibreItem');
+
+            if (colisLibreOk) {
+                colisLibreOk.addEventListener('click', async () => {
+                    const success = await createColisLibre();
+                    if (success) {
+                        document.getElementById('colisLibreModal').classList.remove('show');
+                    }
+                });
+            }
+
+            if (colisLibreCancel) {
+                colisLibreCancel.addEventListener('click', () => {
+                    document.getElementById('colisLibreModal').classList.remove('show');
+                });
+            }
+
+            if (addColisLibreItemBtn) {
+                addColisLibreItemBtn.addEventListener('click', addColisLibreItem);
+            }
+
             // Affichage/masquage de la console de debug (double-clic sur le titre)
             const header = document.querySelector('.header h1');
             if (header) {
@@ -1347,7 +1631,7 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
         // Initialisation
         document.addEventListener('DOMContentLoaded', function() {
             debugLog('DOM chargé, initialisation...');
-            debugLog('🔀 NOUVEAU : Sélecteur de tri par dimensions ajouté !');
+            debugLog('🆕 NOUVEAU : Fonctionnalité Colis Libre ajoutée !');
             
             renderInventory();
             renderColisOverview();
