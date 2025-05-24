@@ -76,6 +76,7 @@ if (!empty($action) && strpos($action, 'ficheproduction_') === 0) {
                                 $length = 1000; // default
                                 $width = 100;   // default
                                 $color = 'Standard'; // default
+                                $ref_ligne = ''; // default
                                 
                                 if (isset($line->array_options) && is_array($line->array_options)) {
                                     // Length variations
@@ -102,6 +103,11 @@ if (!empty($action) && strpos($action, 'ficheproduction_') === 0) {
                                     } elseif (isset($line->array_options['options_couleur']) && !empty($line->array_options['options_couleur'])) {
                                         $color = $line->array_options['options_couleur'];
                                     }
+                                    
+                                    // Ref ligne from extrafield
+                                    if (isset($line->array_options['options_ref_ligne']) && !empty($line->array_options['options_ref_ligne'])) {
+                                        $ref_ligne = $line->array_options['options_ref_ligne'];
+                                    }
                                 }
                                 
                                 // Only add products with quantity > 0
@@ -111,6 +117,7 @@ if (!empty($action) && strpos($action, 'ficheproduction_') === 0) {
                                         'ref' => $product->ref,
                                         'name' => $product->label,
                                         'color' => $color,
+                                        'ref_ligne' => $ref_ligne,
                                         'weight' => (!empty($product->weight) ? $product->weight : 1.0),
                                         'length' => $length,
                                         'width' => $width,
@@ -374,6 +381,14 @@ if (!empty($object->lines)) {
             padding: 2px 8px;
             border-radius: 12px;
             font-size: 12px;
+        }
+
+        .product-ref-ligne {
+            font-size: 11px;
+            color: #666;
+            font-weight: bold;
+            margin: 2px 0;
+            font-style: italic;
         }
 
         .product-name {
@@ -1100,6 +1115,7 @@ if (!empty($object->lines)) {
                     <span class="product-ref">${product.name}</span>
                     <span class="product-color">${product.color}</span>
                 </div>
+                ${product.ref_ligne ? `<div class="product-ref-ligne">Réf: ${product.ref_ligne}</div>` : ''}
                 <div class="product-dimensions">
                     L: ${product.length}mm × l: ${product.width}mm
                 </div>
@@ -1649,6 +1665,7 @@ if (!empty($object->lines)) {
                                     <span>${product.name}</span>
                                     <span class="product-color-badge">${product.color}</span>
                                 </div>
+                                ${product.ref_ligne ? `<div style="font-size: 10px; color: #888; font-style: italic;">Réf: ${product.ref_ligne}</div>` : ''}
                             </td>
                             <td style="font-weight: bold; text-align: right; vertical-align: top;">
                                 ${productInColis.quantity}
@@ -1998,7 +2015,7 @@ if (!empty($object->lines)) {
         // Initialisation
         document.addEventListener('DOMContentLoaded', function() {
             debugLog('DOM chargé, initialisation...');
-            debugLog('🎨 VIGNETTES MODIFIÉES : Libellé en en-tête + suppression code produit');
+            debugLog('📋 NOUVEAU : Ajout extrafield ref_ligne dans les vignettes');
             
             renderInventory();
             renderColisOverview();
