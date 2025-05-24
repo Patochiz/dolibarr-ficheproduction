@@ -269,7 +269,8 @@ class FicheProductionColis extends CommonObject
     {
         $this->lines = array();
 
-        $sql = "SELECT l.rowid, l.fk_colis, l.fk_product, l.quantite, l.poids_unitaire, l.poids_total, l.rang";
+        $sql = "SELECT l.rowid, l.fk_colis, l.fk_product, l.is_libre_product, l.libre_product_name, l.libre_product_description,";
+        $sql .= " l.quantite, l.poids_unitaire, l.poids_total, l.rang";
         $sql .= ", p.ref, p.label, p.weight";
         $sql .= " FROM ".MAIN_DB_PREFIX."ficheproduction_colis_line as l";
         $sql .= " LEFT JOIN ".MAIN_DB_PREFIX."product as p ON l.fk_product = p.rowid";
@@ -288,13 +289,20 @@ class FicheProductionColis extends CommonObject
                 $line->id = $obj->rowid;
                 $line->fk_colis = $obj->fk_colis;
                 $line->fk_product = $obj->fk_product;
+                $line->is_libre_product = $obj->is_libre_product;
+                $line->libre_product_name = $obj->libre_product_name;
+                $line->libre_product_description = $obj->libre_product_description;
                 $line->quantite = $obj->quantite;
                 $line->poids_unitaire = $obj->poids_unitaire;
                 $line->poids_total = $obj->poids_total;
                 $line->rang = $obj->rang;
-                $line->product_ref = $obj->ref;
-                $line->product_label = $obj->label;
-                $line->product_weight = $obj->weight;
+                
+                // Product info (only for standard products)
+                if (!$obj->is_libre_product) {
+                    $line->product_ref = $obj->ref;
+                    $line->product_label = $obj->label;
+                    $line->product_weight = $obj->weight;
+                }
 
                 $this->lines[] = $line;
                 $i++;
@@ -455,6 +463,47 @@ class FicheProductionColis extends CommonObject
         $line = new FicheProductionColisLine($this->db);
         $line->fk_colis = $this->id;
         $line->fk_product = $fk_product;
+        $line->is_libre_product = 0;
+        $line->quantite = $quantite;
+        $line->poids_unitaire = $poids_unitaire;
+        $line->poids_total = $quantite * $poids_unitaire;
+        $line->rang = count($this->lines);
+        $line->date_creation = dol_now();
+        $line->fk_user_creat = $user->id;
+
+        $result = $line->create($user);
+        if ($result > 0) {
+            // Update total weight of colis
+            $this->poids_total += $line->poids_total;
+            $this->update($user, true);
+
+            // Reload lines
+            $this->fetchLines();
+        }
+
+        return $result;
+    }
+
+    /**
+     * Add a free product line to the colis
+     *
+     * @param string $name Product name
+     * @param string $description Product description
+     * @param int $quantite Quantity
+     * @param float $poids_unitaire Unit weight
+     * @param User $user User object
+     * @return int <0 if KO, >0 if OK
+     */
+    public function addFreeLine($name, $description, $quantite, $poids_unitaire, User $user)
+    {
+        require_once DOL_DOCUMENT_ROOT.'/custom/ficheproduction/class/ficheproductioncolisline.class.php';
+
+        $line = new FicheProductionColisLine($this->db);
+        $line->fk_colis = $this->id;
+        $line->fk_product = null;
+        $line->is_libre_product = 1;
+        $line->libre_product_name = $name;
+        $line->libre_product_description = $description;
         $line->quantite = $quantite;
         $line->poids_unitaire = $poids_unitaire;
         $line->poids_total = $quantite * $poids_unitaire;
@@ -549,5 +598,130 @@ class FicheProductionColis extends CommonObject
         }
 
         return $result;
+    }
+
+    /**
+     * Save from JavaScript data structure
+     *
+     * @param array $colisData Colis data from JavaScript
+     * @param int $fk_session Session ID
+     * @param User $user User object
+     * @return int <0 if KO, colis ID if OK
+     */
+    public function createFromJSData($colisData, $fk_session, User $user)
+    {
+        // Set colis properties
+        $this->fk_session = $fk_session;
+        $this->numero_colis = $colisData['number'];
+        $this->poids_max = !empty($colisData['maxWeight']) ? $colisData['maxWeight'] : 25;
+        $this->poids_total = 0; // Will be calculated
+        $this->multiple_colis = !empty($colisData['multiple']) ? $colisData['multiple'] : 1;
+        $this->status = !empty($colisData['status']) ? $colisData['status'] : 'ok';
+        $this->active = 1;
+
+        // Create the colis
+        $result = $this->create($user);
+        if ($result < 0) {
+            return $result;
+        }
+
+        // Add lines
+        $total_weight = 0;
+        if (!empty($colisData['products']) && is_array($colisData['products'])) {
+            foreach ($colisData['products'] as $productData) {
+                $line_result = -1;
+                
+                if (!empty($productData['isLibre'])) {
+                    // Free product
+                    $line_result = $this->addFreeLine(
+                        $productData['name'],
+                        !empty($productData['description']) ? $productData['description'] : '',
+                        $productData['quantity'],
+                        $productData['weight'],
+                        $user
+                    );
+                } else {
+                    // Standard product
+                    $line_result = $this->addLine(
+                        $productData['productId'],
+                        $productData['quantity'],
+                        $productData['weight'],
+                        $user
+                    );
+                }
+
+                if ($line_result < 0) {
+                    dol_syslog(__METHOD__." Error adding line: ".join(',', $this->errors), LOG_ERR);
+                    return -1;
+                }
+
+                $total_weight += $productData['quantity'] * $productData['weight'];
+            }
+        }
+
+        // Update total weight
+        $this->poids_total = $total_weight;
+        $this->update($user, true);
+
+        return $this->id;
+    }
+
+    /**
+     * Update from JavaScript data structure
+     *
+     * @param array $colisData Colis data from JavaScript
+     * @param User $user User object
+     * @return int <0 if KO, >0 if OK
+     */
+    public function updateFromJSData($colisData, User $user)
+    {
+        // Update colis properties
+        $this->poids_max = !empty($colisData['maxWeight']) ? $colisData['maxWeight'] : 25;
+        $this->multiple_colis = !empty($colisData['multiple']) ? $colisData['multiple'] : 1;
+        $this->status = !empty($colisData['status']) ? $colisData['status'] : 'ok';
+
+        // Delete all existing lines
+        foreach ($this->lines as $line) {
+            $line->delete($user);
+        }
+        $this->lines = array();
+
+        // Add new lines
+        $total_weight = 0;
+        if (!empty($colisData['products']) && is_array($colisData['products'])) {
+            foreach ($colisData['products'] as $productData) {
+                $line_result = -1;
+                
+                if (!empty($productData['isLibre'])) {
+                    // Free product
+                    $line_result = $this->addFreeLine(
+                        $productData['name'],
+                        !empty($productData['description']) ? $productData['description'] : '',
+                        $productData['quantity'],
+                        $productData['weight'],
+                        $user
+                    );
+                } else {
+                    // Standard product
+                    $line_result = $this->addLine(
+                        $productData['productId'],
+                        $productData['quantity'],
+                        $productData['weight'],
+                        $user
+                    );
+                }
+
+                if ($line_result < 0) {
+                    dol_syslog(__METHOD__." Error adding line: ".join(',', $this->errors), LOG_ERR);
+                    return -1;
+                }
+
+                $total_weight += $productData['quantity'] * $productData['weight'];
+            }
+        }
+
+        // Update total weight
+        $this->poids_total = $total_weight;
+        return $this->update($user, true);
     }
 }
