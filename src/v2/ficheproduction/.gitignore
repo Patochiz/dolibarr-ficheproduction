@@ -1,0 +1,75 @@
+# Gitignore for Fiche de Production v2.0
+
+# Logs
+*.log
+debug.log
+error.log
+
+# Temporary files
+*.tmp
+*.temp
+*~
+
+# Cache files
+.cache/
+cache/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Custom config files (if any)
+config.local.php
+
+# Upload directories (if any)
+uploads/
+temp/
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# SQL dumps
+*.sql.gz
+*.sql.bz2
+
+# Documentation build
+docs/_build/
+docs/build/
+
+# Test files
+test_*.php
+test_data/
+
+# Development tools
+node_modules/
+package-lock.json
+yarn.lock
+
+# Compiled assets (if using build tools)
+dist/
+build/
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# Dolibarr specific
+documents/ficheproduction/
+
+# Module specific
+demo_created_*.sql
