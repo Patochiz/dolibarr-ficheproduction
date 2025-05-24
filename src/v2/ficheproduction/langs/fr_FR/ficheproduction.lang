@@ -129,6 +129,7 @@ ProjectReference = Référence du chantier
 Comments = Commentaires
 TotalPackages = Total colis
 TotalWeight = Poids total
+DeliveryInformation = Adresse de livraison
 
 #
 # Statuts
