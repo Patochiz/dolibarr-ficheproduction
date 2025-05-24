@@ -120,10 +120,13 @@
     margin-right: 8px;
 }
 
+/* CORRECTION : Contrôles d'inventaire avec gestion du débordement */
 .inventory-controls {
     padding: 15px;
     background: white;
     border-bottom: 1px solid #ddd;
+    overflow-x: auto; /* Permet le scroll horizontal si nécessaire */
+    min-height: fit-content;
 }
 
 .search-box {
@@ -134,6 +137,7 @@
     margin-bottom: 10px;
     font-size: 14px;
     transition: border-color 0.3s;
+    min-width: 200px; /* Éviter le rétrécissement excessif */
 }
 
 .search-box:focus {
@@ -142,19 +146,28 @@
     box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
 }
 
+/* CORRECTION : Contrôles de tri flexibles */
 .sort-controls {
     display: flex;
-    gap: 10px;
+    gap: 8px;
     margin-bottom: 10px;
+    flex-wrap: wrap; /* Permettre le passage à la ligne si nécessaire */
+    align-items: center;
 }
 
+/* CORRECTION : Sélecteurs avec largeur flexible */
 .sort-select {
-    flex: 1;
-    padding: 6px 10px;
+    flex: 1 1 120px; /* grow, shrink, basis */
+    min-width: 120px;
+    max-width: 200px;
+    padding: 6px 8px;
     border: 1px solid #ddd;
     border-radius: 4px;
     background: white;
-    font-size: 13px;
+    font-size: 12px; /* Réduction pour plus d'espace */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .inventory-list {
@@ -930,6 +943,7 @@
     }
 }
 
+/* CORRECTION RESPONSIVE : Amélioration mobile pour les contrôles */
 @media (max-width: 768px) {
     .header {
         padding: 10px 15px;
@@ -940,9 +954,19 @@
         font-size: 20px;
     }
     
+    /* CORRECTION : Contrôles de tri en colonne sur mobile */
     .sort-controls {
         flex-direction: column;
         gap: 5px;
+        align-items: stretch;
+    }
+    
+    .sort-select {
+        flex: none;
+        width: 100%;
+        max-width: none;
+        min-width: unset;
+        font-size: 13px; /* Remettre taille normale sur mobile */
     }
     
     .colis-table {
