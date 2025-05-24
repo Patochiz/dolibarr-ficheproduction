@@ -445,7 +445,7 @@ if (!empty($object->lines)) {
             width: 60%;
             display: flex;
             flex-direction: column;
-            min-height: 700px;
+            min-height: fit-content;
         }
 
         .constructor-header {
@@ -478,10 +478,8 @@ if (!empty($object->lines)) {
         .colis-overview {
             padding: 15px;
             background: #f9f9f9;
-            min-height: 200px;
-            flex: 1;
+            min-height: fit-content;
             overflow-y: auto;
-            max-height: 50vh;
         }
 
         .colis-table {
