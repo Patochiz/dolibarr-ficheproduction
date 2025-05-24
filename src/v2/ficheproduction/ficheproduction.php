@@ -307,6 +307,7 @@ if (!empty($object->lines)) {
             opacity: 0.5;
             transform: rotate(3deg) scale(0.95);
             cursor: grabbing;
+            z-index: 1000;
         }
 
         .product-item.exhausted {
@@ -451,8 +452,15 @@ if (!empty($object->lines)) {
         }
 
         .colis-table tr.drop-active {
-            background: #e8f5e8;
-            border-left: 4px solid #4CAF50;
+            background: #e8f5e8 !important;
+            border-left: 4px solid #4CAF50 !important;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0% { background: #e8f5e8; }
+            50% { background: #c8e6c9; }
+            100% { background: #e8f5e8; }
         }
 
         .colis-table .colis-number {
@@ -631,11 +639,13 @@ if (!empty($object->lines)) {
             min-height: 200px;
             padding: 15px;
             position: relative;
+            transition: all 0.3s ease;
         }
 
         .colis-content.drop-zone-active {
-            border-color: #4CAF50;
-            background: #e8f5e8;
+            border-color: #4CAF50 !important;
+            background: #e8f5e8 !important;
+            transform: scale(1.01);
         }
 
         .colis-line {
@@ -709,6 +719,12 @@ if (!empty($object->lines)) {
             color: #999;
             font-style: italic;
             pointer-events: none;
+            opacity: 1;
+            transition: opacity 0.3s;
+        }
+
+        .colis-content.drop-zone-active .drop-hint {
+            opacity: 0;
         }
 
         .empty-state {
@@ -757,6 +773,7 @@ if (!empty($object->lines)) {
             max-height: 200px;
             overflow-y: auto;
             display: none;
+            z-index: 9999;
         }
 
         /* Modales custom */
@@ -957,6 +974,7 @@ if (!empty($object->lines)) {
         let draggedColisLine = null;
         let currentSort = 'ref';
         let currentFilter = 'all';
+        let isDragging = false;
 
         // Configuration
         const ORDER_ID = <?php echo $object->id; ?>;
@@ -1095,6 +1113,38 @@ if (!empty($object->lines)) {
             } else {
                 debugLog('Erreur lors du chargement des données');
             }
+        }
+
+        // Gestion globale des zones de drop
+        function activateDropZones() {
+            if (!isDragging) return;
+            
+            debugLog('🎯 Activation des zones de drop');
+            
+            // Activer toutes les lignes du tableau colis
+            const allColisRows = document.querySelectorAll('#colisTableBody tr');
+            allColisRows.forEach(row => {
+                if (row.dataset.colisId || row.classList.contains('colis-group-header') || row.classList.contains('colis-group-item')) {
+                    row.classList.add('drop-active');
+                }
+            });
+            
+            // Activer la zone de détail du colis sélectionné
+            const colisContent = document.getElementById('colisContent');
+            if (colisContent && selectedColis) {
+                colisContent.classList.add('drop-zone-active');
+            }
+        }
+
+        function deactivateDropZones() {
+            debugLog('🔴 Désactivation des zones de drop');
+            
+            // Désactiver toutes les zones de drop
+            const dropActiveElements = document.querySelectorAll('.drop-active');
+            dropActiveElements.forEach(el => el.classList.remove('drop-active'));
+            
+            const dropZoneActive = document.querySelectorAll('.drop-zone-active');
+            dropZoneActive.forEach(el => el.classList.remove('drop-zone-active'));
         }
 
         // Fonctions principales définies en premier
@@ -1373,14 +1423,31 @@ if (!empty($object->lines)) {
 
                 // Événements drag & drop
                 productElement.addEventListener('dragstart', function(e) {
+                    if (status === 'exhausted') {
+                        e.preventDefault();
+                        return;
+                    }
+                    
+                    isDragging = true;
                     draggedProduct = product;
                     this.classList.add('dragging');
                     e.dataTransfer.effectAllowed = 'copy';
+                    debugLog(`🚀 Drag start: ${product.ref}`);
+                    
+                    // Activer les zones de drop après un délai pour laisser le temps au dragstart de s'exécuter
+                    setTimeout(() => {
+                        activateDropZones();
+                    }, 50);
                 });
 
                 productElement.addEventListener('dragend', function(e) {
                     this.classList.remove('dragging');
+                    isDragging = false;
                     draggedProduct = null;
+                    debugLog(`🛑 Drag end: ${product.ref}`);
+                    
+                    // Désactiver les zones de drop
+                    deactivateDropZones();
                 });
 
                 container.appendChild(productElement);
@@ -1390,6 +1457,11 @@ if (!empty($object->lines)) {
         function renderColisOverview() {
             const tbody = document.getElementById('colisTableBody');
             tbody.innerHTML = '';
+
+            if (colis.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="empty-state">Aucun colis créé. Cliquez sur "Nouveau Colis" pour commencer.</td></tr>';
+                return;
+            }
 
             colis.forEach(c => {
                 const weightPercentage = (c.totalWeight / c.maxWeight) * 100;
@@ -1429,12 +1501,15 @@ if (!empty($object->lines)) {
                     selectColis(c);
                 });
 
+                // Setup drop zone pour l'en-tête du colis
+                setupDropZone(headerRow, c.id);
                 tbody.appendChild(headerRow);
 
                 // Lignes pour chaque produit dans le colis
                 if (c.products.length === 0) {
                     const emptyRow = document.createElement('tr');
                     emptyRow.className = 'colis-group-item';
+                    emptyRow.dataset.colisId = c.id;
                     emptyRow.innerHTML = `
                         <td></td>
                         <td colspan="5" style="font-style: italic; color: #999; padding: 10px;">
@@ -1442,24 +1517,7 @@ if (!empty($object->lines)) {
                         </td>
                     `;
                     
-                    // Drop zone pour colis vide
-                    emptyRow.addEventListener('dragover', function(e) {
-                        e.preventDefault();
-                        this.style.background = '#e8f5e8';
-                    });
-
-                    emptyRow.addEventListener('dragleave', function(e) {
-                        this.style.background = '';
-                    });
-
-                    emptyRow.addEventListener('drop', async function(e) {
-                        e.preventDefault();
-                        this.style.background = '';
-                        if (draggedProduct) {
-                            await addProductToColis(c.id, draggedProduct.id, 1);
-                        }
-                    });
-
+                    setupDropZone(emptyRow, c.id);
                     tbody.appendChild(emptyRow);
                 } else {
                     c.products.forEach((productInColis, index) => {
@@ -1538,26 +1596,31 @@ if (!empty($object->lines)) {
                             });
                         }
 
-                        // Drop zone sur les lignes de produits
-                        productRow.addEventListener('dragover', function(e) {
-                            e.preventDefault();
-                            this.style.background = '#e8f5e8';
-                        });
-
-                        productRow.addEventListener('dragleave', function(e) {
-                            this.style.background = '';
-                        });
-
-                        productRow.addEventListener('drop', async function(e) {
-                            e.preventDefault();
-                            this.style.background = '';
-                            if (draggedProduct) {
-                                await addProductToColis(c.id, draggedProduct.id, 1);
-                            }
-                        });
-
+                        setupDropZone(productRow, c.id);
                         tbody.appendChild(productRow);
                     });
+                }
+            });
+        }
+
+        function setupDropZone(element, colisId) {
+            element.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'copy';
+                if (isDragging && draggedProduct) {
+                    debugLog(`🎯 Dragover sur colis ${colisId}`);
+                }
+            });
+
+            element.addEventListener('drop', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                if (draggedProduct && isDragging) {
+                    debugLog(`📍 Drop sur colis ${colisId} - Produit: ${draggedProduct.ref}`);
+                    addProductToColis(colisId, draggedProduct.id, 1);
+                } else {
+                    debugLog(`❌ Drop échoué - draggedProduct: ${!!draggedProduct}, isDragging: ${isDragging}`);
                 }
             });
         }
@@ -1676,25 +1739,7 @@ if (!empty($object->lines)) {
             // Setup drop zone pour le contenu du colis
             const colisContent = document.getElementById('colisContent');
             if (colisContent) {
-                colisContent.addEventListener('dragover', function(e) {
-                    e.preventDefault();
-                    this.classList.add('drop-zone-active');
-                });
-
-                colisContent.addEventListener('dragleave', function(e) {
-                    this.classList.remove('drop-zone-active');
-                });
-
-                colisContent.addEventListener('drop', async function(e) {
-                    e.preventDefault();
-                    this.classList.remove('drop-zone-active');
-                    if (draggedProduct) {
-                        await addProductToColis(selectedColis.id, draggedProduct.id, 1);
-                    } else if (draggedColisLine !== null) {
-                        // Réorganisation des produits dans le colis
-                        reorderProductInColis(draggedColisLine.colisId, draggedColisLine.fromIndex, getDropIndex(e));
-                    }
-                });
+                setupDropZone(colisContent, selectedColis.id);
 
                 // Setup drag & drop pour réorganiser les produits
                 const colisLines = container.querySelectorAll('.colis-line');
@@ -1717,7 +1762,7 @@ if (!empty($object->lines)) {
         }
 
         function addProductToColis(colisId, productId, quantity) {
-            debugLog(`Ajout produit ${productId} (qté: ${quantity}) au colis ${colisId}`);
+            debugLog(`🔧 Ajout produit ${productId} (qté: ${quantity}) au colis ${colisId}`);
             
             const coliData = colis.find(c => c.id === colisId);
             const product = products.find(p => p.id === productId);
@@ -1740,12 +1785,14 @@ if (!empty($object->lines)) {
             if (existingProduct) {
                 existingProduct.quantity += quantity;
                 existingProduct.weight = existingProduct.quantity * product.weight;
+                debugLog(`✅ Quantité mise à jour pour ${product.ref}: ${existingProduct.quantity}`);
             } else {
                 coliData.products.push({
                     productId: productId,
                     quantity: quantity,
                     weight: quantity * product.weight
                 });
+                debugLog(`✅ Nouveau produit ajouté: ${product.ref}`);
             }
 
             // Recalculer le poids total
@@ -1753,6 +1800,7 @@ if (!empty($object->lines)) {
 
             // Mettre à jour les quantités utilisées (tenir compte des multiples)
             product.used += quantity * coliData.multiple;
+            debugLog(`📊 Stock mis à jour ${product.ref}: ${product.used}/${product.total}`);
 
             // Re-render
             renderInventory();
