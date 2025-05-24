@@ -33,6 +33,183 @@ $langs->loadLangs(array('orders', 'products', 'companies'));
 // Get parameters
 $id = GETPOST('id', 'int');
 $ref = GETPOST('ref', 'alpha');
+$action = GETPOST('action', 'alpha');
+
+// Handle AJAX actions first
+if (!empty($action) && strpos($action, 'ficheproduction_') === 0) {
+    // Set JSON header
+    header('Content-Type: application/json');
+    
+    // Initialize objects for AJAX
+    $object = new Commande($db);
+    if ($id > 0) {
+        $object->fetch($id);
+    }
+    
+    switch ($action) {
+        case 'ficheproduction_get_data':
+            handleGetData($db, $object);
+            break;
+        case 'ficheproduction_add_colis':
+            handleAddColis($db, $object, $user);
+            break;
+        case 'ficheproduction_delete_colis':
+            handleDeleteColis($db, $user);
+            break;
+        case 'ficheproduction_add_product':
+            handleAddProduct($db, $user);
+            break;
+        case 'ficheproduction_remove_product':
+            handleRemoveProduct($db, $user);
+            break;
+        case 'ficheproduction_update_quantity':
+            handleUpdateQuantity($db, $user);
+            break;
+        case 'ficheproduction_update_multiple':
+            handleUpdateMultiple($db, $user);
+            break;
+        default:
+            echo json_encode(['success' => false, 'error' => 'Unknown action']);
+    }
+    exit;
+}
+
+// AJAX Handler Functions
+function handleGetData($db, $object) {
+    $data = array(
+        'products' => array(),
+        'colis' => array(),
+        'session' => null
+    );
+    
+    try {
+        // Get products from order lines
+        if ($object->id > 0) {
+            // Fetch order lines if not already loaded
+            if (empty($object->lines)) {
+                $object->fetch_lines();
+            }
+            
+            foreach ($object->lines as $line) {
+                if ($line->fk_product > 0) {
+                    $product = new Product($db);
+                    $result = $product->fetch($line->fk_product);
+                    
+                    if ($result > 0 && $product->type == 0) { // Only products, not services
+                        // Get dimensions from line extrafields
+                        $length = 1000; // default
+                        $width = 100;   // default
+                        $color = 'Standard'; // default
+                        
+                        // Try to get dimensions from extrafields
+                        if (isset($line->array_options)) {
+                            // Length variations
+                            if (isset($line->array_options['options_length']) && !empty($line->array_options['options_length'])) {
+                                $length = floatval($line->array_options['options_length']);
+                            } elseif (isset($line->array_options['options_longueur']) && !empty($line->array_options['options_longueur'])) {
+                                $length = floatval($line->array_options['options_longueur']);
+                            } elseif (isset($line->array_options['options_long']) && !empty($line->array_options['options_long'])) {
+                                $length = floatval($line->array_options['options_long']);
+                            }
+                            
+                            // Width variations
+                            if (isset($line->array_options['options_width']) && !empty($line->array_options['options_width'])) {
+                                $width = floatval($line->array_options['options_width']);
+                            } elseif (isset($line->array_options['options_largeur']) && !empty($line->array_options['options_largeur'])) {
+                                $width = floatval($line->array_options['options_largeur']);
+                            } elseif (isset($line->array_options['options_larg']) && !empty($line->array_options['options_larg'])) {
+                                $width = floatval($line->array_options['options_larg']);
+                            }
+                            
+                            // Color variations
+                            if (isset($line->array_options['options_color']) && !empty($line->array_options['options_color'])) {
+                                $color = $line->array_options['options_color'];
+                            } elseif (isset($line->array_options['options_couleur']) && !empty($line->array_options['options_couleur'])) {
+                                $color = $line->array_options['options_couleur'];
+                            }
+                        }
+                        
+                        $data['products'][] = array(
+                            'id' => $product->id,
+                            'ref' => $product->ref,
+                            'label' => $product->label,
+                            'weight' => (!empty($product->weight) ? $product->weight : 1.0),
+                            'length' => $length,
+                            'width' => $width,
+                            'color' => $color,
+                            'total' => $line->qty,
+                            'used' => 0 // TODO: Calculate from existing colis
+                        );
+                    }
+                }
+            }
+        }
+        
+        // TODO: Load existing colis from database when implemented
+        
+        echo json_encode($data);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+}
+
+function handleAddColis($db, $object, $user) {
+    try {
+        // For now, just return success
+        // TODO: Implement actual database insertion
+        echo json_encode([
+            'success' => true, 
+            'colis_id' => rand(1000, 9999) // Temporary ID
+        ]);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+}
+
+function handleDeleteColis($db, $user) {
+    try {
+        // TODO: Implement actual database deletion
+        echo json_encode(['success' => true]);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+}
+
+function handleAddProduct($db, $user) {
+    try {
+        // TODO: Implement actual database insertion
+        echo json_encode(['success' => true]);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+}
+
+function handleRemoveProduct($db, $user) {
+    try {
+        // TODO: Implement actual database deletion
+        echo json_encode(['success' => true]);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+}
+
+function handleUpdateQuantity($db, $user) {
+    try {
+        // TODO: Implement actual database update
+        echo json_encode(['success' => true]);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+}
+
+function handleUpdateMultiple($db, $user) {
+    try {
+        // TODO: Implement actual database update
+        echo json_encode(['success' => true]);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+}
 
 // Initialize objects
 $object = new Commande($db);
@@ -82,6 +259,30 @@ $morehtmlref .= '</div>';
 dol_banner_tab($object, 'ref', $linkback, 1, 'ref', 'ref', $morehtmlref);
 
 print '<div class="fichecenter">';
+
+// DEBUG: Show available extrafields for debugging
+$first_product_line = null;
+if (!empty($object->lines)) {
+    foreach ($object->lines as $line) {
+        if ($line->fk_product > 0) {
+            $temp_product = new Product($db);
+            $temp_product->fetch($line->fk_product);
+            if ($temp_product->type == 0) { // Only products, not services
+                $first_product_line = $line;
+                break;
+            }
+        }
+    }
+}
+
+if ($first_product_line && !empty($first_product_line->array_options)) {
+    print '<div style="background: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 4px; font-size: 12px;">';
+    print '<strong>🔍 DEBUG - Extrafields disponibles dans la première ligne produit :</strong><br>';
+    foreach ($first_product_line->array_options as $key => $value) {
+        print "• <code>$key</code> = " . (is_null($value) ? 'null' : htmlspecialchars($value)) . "<br>";
+    }
+    print '</div>';
+}
 ?>
 
 <style>
@@ -788,7 +989,7 @@ print '<div class="fichecenter">';
                     </tr>
                 </thead>
                 <tbody id="colisTableBody">
-                    <!-- Généré par JavaScript -->
+                    <tr><td colspan="6" class="empty-state">Aucun colis créé. Cliquez sur "Nouveau Colis" pour commencer.</td></tr>
                 </tbody>
             </table>
         </div>
@@ -943,15 +1144,20 @@ async function apiCall(action, data = {}) {
     }
 
     try {
+        debugLog(`API Call: ${action}`);
         const response = await fetch(window.location.href, {
             method: 'POST',
             body: formData
         });
         
-        if (response.headers.get('content-type')?.includes('application/json')) {
-            return await response.json();
-        } else {
-            throw new Error('Response is not JSON');
+        const text = await response.text();
+        debugLog(`Response text: ${text.substring(0, 200)}...`);
+        
+        try {
+            return JSON.parse(text);
+        } catch (parseError) {
+            debugLog(`JSON Parse Error: ${parseError.message}`);
+            return { success: false, error: 'Invalid JSON response', rawResponse: text };
         }
     } catch (error) {
         debugLog('Erreur API: ' + error.message);
@@ -962,6 +1168,8 @@ async function apiCall(action, data = {}) {
 async function loadData() {
     debugLog('Chargement des données...');
     const result = await apiCall('ficheproduction_get_data');
+    
+    debugLog(`Résultat API: ${JSON.stringify(result)}`);
     
     if (result && result.products) {
         products = result.products;
@@ -975,7 +1183,10 @@ async function loadData() {
             selectColis(colis[0]);
         }
     } else {
-        debugLog('Erreur lors du chargement des données');
+        debugLog('Erreur lors du chargement des données: ' + (result?.error || 'Unknown error'));
+        if (result?.rawResponse) {
+            debugLog('Raw response: ' + result.rawResponse.substring(0, 500));
+        }
     }
 }
 
@@ -984,12 +1195,19 @@ async function addNewColis() {
     const result = await apiCall('ficheproduction_add_colis');
     
     if (result && result.success) {
-        await loadData(); // Recharger les données
-        // Sélectionner le nouveau colis
-        const newColis = colis.find(c => c.id == result.colis_id);
-        if (newColis) {
-            selectColis(newColis);
-        }
+        // Créer un faux colis temporaire pour l'interface
+        const newColis = {
+            id: result.colis_id,
+            numero_colis: colis.length + 1,
+            poids_max: 25,
+            poids_total: 0,
+            multiple_colis: 1,
+            status: 'ok',
+            products: []
+        };
+        colis.push(newColis);
+        renderColisOverview();
+        selectColis(newColis);
     }
 }
 
@@ -1005,8 +1223,13 @@ async function deleteColis(colisId) {
     const result = await apiCall('ficheproduction_delete_colis', { colis_id: colisId });
     
     if (result && result.success) {
-        await loadData(); // Recharger les données
+        // Supprimer de l'interface
+        const index = colis.findIndex(c => c.id == colisId);
+        if (index > -1) {
+            colis.splice(index, 1);
+        }
         selectedColis = null;
+        renderColisOverview();
         renderColisDetail();
     }
 }
@@ -1021,65 +1244,38 @@ async function addProductToColis(colisId, productId, quantity) {
     });
     
     if (result && result.success) {
-        await loadData(); // Recharger les données
-        // Resélectionner le colis courant
-        const currentColis = colis.find(c => c.id == colisId);
-        if (currentColis) {
-            selectColis(currentColis);
+        // Mettre à jour l'interface localement
+        const targetColis = colis.find(c => c.id == colisId);
+        const product = products.find(p => p.id == productId);
+        
+        if (targetColis && product) {
+            // Vérifier si le produit existe déjà
+            const existingProduct = targetColis.products.find(p => p.product_id == productId);
+            if (existingProduct) {
+                existingProduct.quantite += quantity;
+                existingProduct.poids_total = existingProduct.quantite * product.weight;
+            } else {
+                targetColis.products.push({
+                    product_id: productId,
+                    quantite: quantity,
+                    poids_total: quantity * product.weight
+                });
+            }
+            
+            // Recalculer le poids total
+            targetColis.poids_total = targetColis.products.reduce((sum, p) => sum + p.poids_total, 0);
+            
+            // Mettre à jour les quantités utilisées
+            product.used += quantity * targetColis.multiple_colis;
+            
+            renderInventory();
+            renderColisOverview();
+            if (selectedColis && selectedColis.id == colisId) {
+                selectColis(targetColis);
+            }
         }
     } else {
         await showConfirm('Erreur lors de l\'ajout du produit');
-    }
-}
-
-async function removeProductFromColis(colisId, productId) {
-    const result = await apiCall('ficheproduction_remove_product', {
-        colis_id: colisId,
-        product_id: productId
-    });
-    
-    if (result && result.success) {
-        await loadData(); // Recharger les données
-        // Resélectionner le colis courant
-        const currentColis = colis.find(c => c.id == colisId);
-        if (currentColis) {
-            selectColis(currentColis);
-        }
-    }
-}
-
-async function updateProductQuantity(colisId, productId, newQuantity) {
-    const result = await apiCall('ficheproduction_update_quantity', {
-        colis_id: colisId,
-        product_id: productId,
-        quantite: newQuantity
-    });
-    
-    if (result && result.success) {
-        await loadData(); // Recharger les données
-        // Resélectionner le colis courant
-        const currentColis = colis.find(c => c.id == colisId);
-        if (currentColis) {
-            selectColis(currentColis);
-        }
-    } else {
-        await showConfirm('Erreur lors de la mise à jour de la quantité');
-    }
-}
-
-async function updateColisMultiple(colisId, multiple) {
-    const result = await apiCall('ficheproduction_update_multiple', {
-        colis_id: colisId,
-        multiple: multiple
-    });
-    
-    if (result && result.success) {
-        await loadData(); // Recharger les données
-        // Resélectionner le colis courant
-        const currentColis = colis.find(c => c.id == colisId);
-        if (currentColis) {
-            selectColis(currentColis);
-        }
     }
 }
 
@@ -1087,6 +1283,11 @@ async function updateColisMultiple(colisId, multiple) {
 function renderInventory() {
     const container = document.getElementById('inventoryList');
     container.innerHTML = '';
+
+    if (products.length === 0) {
+        container.innerHTML = '<div class="empty-state">Aucun produit trouvé dans cette commande</div>';
+        return;
+    }
 
     // Trier les produits selon le critère sélectionné
     const sortedProducts = [...products].sort((a, b) => {
@@ -1163,6 +1364,11 @@ function renderInventory() {
 function renderColisOverview() {
     const tbody = document.getElementById('colisTableBody');
     tbody.innerHTML = '';
+
+    if (colis.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-state">Aucun colis créé. Cliquez sur "Nouveau Colis" pour commencer.</td></tr>';
+        return;
+    }
 
     colis.forEach(c => {
         const weightPercentage = (c.poids_total / c.poids_max) * 100;
@@ -1280,7 +1486,8 @@ function setupProductRowButtons(productRow, coli, product, productInColis) {
                 productInColis.quantite.toString()
             );
             if (newQuantity !== null && !isNaN(newQuantity) && parseInt(newQuantity) > 0) {
-                await updateProductQuantity(coli.id, product.id, parseInt(newQuantity));
+                // TODO: Call API to update quantity
+                debugLog(`Update quantity: ${newQuantity}`);
             }
         });
     }
@@ -1292,7 +1499,8 @@ function setupProductRowButtons(productRow, coli, product, productInColis) {
                 `Supprimer ${product.ref} du colis ${coli.numero_colis} ?`
             );
             if (confirmed) {
-                removeProductFromColis(coli.id, product.id);
+                // TODO: Call API to remove product
+                debugLog(`Remove product: ${product.id} from colis ${coli.id}`);
             }
         });
     }
@@ -1305,7 +1513,8 @@ function setupProductRowButtons(productRow, coli, product, productInColis) {
             const newMultiple = await showPrompt(message, currentMultiple.toString());
             
             if (newMultiple !== null && !isNaN(newMultiple) && parseInt(newMultiple) > 0) {
-                updateColisMultiple(coli.id, parseInt(newMultiple));
+                // TODO: Call API to update multiple
+                debugLog(`Update multiple: ${newMultiple}`);
             }
         });
     }
@@ -1414,37 +1623,6 @@ function setupColisDetailEvents() {
             await deleteColis(selectedColis.id);
         });
     }
-
-    // Input pour les multiples
-    const multipleInput = document.getElementById('multipleInput');
-    if (multipleInput) {
-        multipleInput.addEventListener('change', async (e) => {
-            await updateColisMultiple(selectedColis.id, e.target.value);
-        });
-    }
-
-    // Boutons supprimer ligne
-    const removeLineBtns = document.querySelectorAll('.btn-remove-line');
-    removeLineBtns.forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            const productId = parseInt(e.target.dataset.productId);
-            const confirmed = await showConfirm('Supprimer cette ligne ?');
-            if (confirmed) {
-                removeProductFromColis(selectedColis.id, productId);
-            }
-        });
-    });
-
-    // Inputs quantité
-    const quantityInputs = document.querySelectorAll('.line-quantity');
-    quantityInputs.forEach(input => {
-        input.addEventListener('change', async (e) => {
-            const productId = parseInt(e.target.dataset.productId);
-            await updateProductQuantity(selectedColis.id, productId, e.target.value);
-        });
-    });
 
     // Setup drop zone pour le contenu du colis
     const colisContent = document.getElementById('colisContent');
