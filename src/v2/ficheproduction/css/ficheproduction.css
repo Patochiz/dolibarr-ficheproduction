@@ -28,6 +28,7 @@
     --warning-color: #FF9800;
     --error-color: #f44336;
     --info-color: #2196F3;
+    --libre-color: #9C27B0; /* Couleur pour les éléments libres */
     --border-color: #e0e0e0;
     --background-light: #fafafa;
     --text-color: #333;
@@ -213,6 +214,18 @@
     margin-bottom: 10px;
 }
 
+/* Styles pour les produits libres */
+.product-item.libre-item {
+    background: #f3e5f5;
+    border-color: var(--libre-color);
+    cursor: default;
+}
+
+.product-item.libre-item:hover {
+    border-color: var(--libre-color);
+    box-shadow: 0 2px 8px rgba(156, 39, 176, 0.2);
+}
+
 .product-header {
     display: flex;
     justify-content: space-between;
@@ -233,6 +246,23 @@
     border-radius: 12px;
     font-size: 12px;
     font-weight: 500;
+}
+
+/* Badge pour les produits libres */
+.libre-badge {
+    background: var(--libre-color) !important;
+    color: white !important;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 10px;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.libre-info {
+    font-size: 12px;
+    color: var(--libre-color);
+    font-weight: bold;
 }
 
 .product-ref-ligne {
@@ -338,6 +368,12 @@
     margin-right: 8px;
 }
 
+/* Groupe de boutons dans l'en-tête */
+.constructor-buttons {
+    display: flex;
+    gap: 10px;
+}
+
 .btn-add-colis {
     background: rgba(255,255,255,0.2);
     border: 1px solid rgba(255,255,255,0.5);
@@ -352,6 +388,24 @@
 
 .btn-add-colis:hover {
     background: rgba(255,255,255,0.3);
+    transform: translateY(-1px);
+}
+
+/* Bouton pour colis libre */
+.btn-add-colis-libre {
+    background: var(--libre-color);
+    border: 1px solid var(--libre-color);
+    color: white;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: var(--transition);
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.btn-add-colis-libre:hover {
+    background: #7B1FA2;
     transform: translateY(-1px);
 }
 
@@ -409,6 +463,21 @@
     background: #e8f5e8 !important;
     border-left: 4px solid var(--success-color) !important;
     animation: pulse 1s infinite;
+}
+
+/* Styles spécifiques pour les colis libres */
+.colis-table tr.colis-libre {
+    background: #f3e5f5;
+    border-left: 4px solid var(--libre-color);
+}
+
+.colis-table tr.colis-libre:hover {
+    background: #e1bee7;
+}
+
+.colis-table tr.colis-libre.selected {
+    background: #e1bee7;
+    border-left: 4px solid var(--libre-color);
 }
 
 @keyframes pulse {
@@ -781,6 +850,10 @@
     background: var(--error-color); 
 }
 
+.status-indicator.libre {
+    background: var(--libre-color);
+}
+
 /* Messages de notification */
 .notification {
     position: fixed;
@@ -860,6 +933,12 @@
     width: 90%;
 }
 
+/* Modale élargie pour les colis libres */
+.modal-content.modal-large {
+    max-width: 600px;
+    width: 95%;
+}
+
 .modal-header {
     font-size: 18px;
     font-weight: bold;
@@ -924,6 +1003,87 @@
     background: #d0d0d0;
 }
 
+/* Styles pour le formulaire de colis libre */
+.colis-libre-form {
+    margin-bottom: 20px;
+}
+
+.colis-libre-form h4 {
+    margin: 0 0 15px 0;
+    color: var(--libre-color);
+    font-size: 16px;
+}
+
+.colis-libre-item {
+    margin-bottom: 10px;
+    padding: 15px;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    background: #f9f9f9;
+}
+
+.colis-libre-fields {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr auto;
+    gap: 10px;
+    align-items: center;
+}
+
+.libre-name,
+.libre-weight,
+.libre-quantity {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.libre-name {
+    width: 100%;
+}
+
+.libre-weight,
+.libre-quantity {
+    width: 100%;
+    text-align: center;
+}
+
+.btn-remove-libre-item {
+    background: var(--error-color);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-remove-libre-item:hover {
+    background: #d32f2f;
+    transform: scale(1.1);
+}
+
+.btn-add-item {
+    background: var(--libre-color);
+    color: white;
+    border: none;
+    padding: 10px 15px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: var(--transition);
+}
+
+.btn-add-item:hover {
+    background: #7B1FA2;
+    transform: translateY(-1px);
+}
+
 /* Responsive design */
 @media (max-width: 1200px) {
     .colisage-container {
@@ -967,6 +1127,27 @@
         max-width: none;
         min-width: unset;
         font-size: 13px; /* Remettre taille normale sur mobile */
+    }
+    
+    .constructor-buttons {
+        flex-direction: column;
+        gap: 5px;
+    }
+    
+    .btn-add-colis,
+    .btn-add-colis-libre {
+        width: 100%;
+        text-align: center;
+    }
+    
+    .colis-libre-fields {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+    
+    .modal-content.modal-large {
+        width: 98%;
+        margin: 10px;
     }
     
     .colis-table {
