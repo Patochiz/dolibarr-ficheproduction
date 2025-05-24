@@ -10,7 +10,7 @@
 /**
  * \file        ficheproduction.php
  * \ingroup     ficheproduction
- * \brief       Interface drag & drop de colisage - Version simplifiée
+ * \brief       Interface drag & drop de colisage - Version corrigée avec token CSRF
  */
 
 // Load Dolibarr environment
@@ -59,14 +59,47 @@ if (!empty($action) && strpos($action, 'ficheproduction_') === 0) {
                         if ($line->fk_product > 0) {
                             $product = new Product($db);
                             if ($product->fetch($line->fk_product) > 0 && $product->type == 0) {
+                                
+                                // Get dimensions from line extrafields
+                                $length = 1000; // default
+                                $width = 100;   // default
+                                $color = 'Standard'; // default
+                                
+                                if (isset($line->array_options) && is_array($line->array_options)) {
+                                    // Length variations
+                                    if (isset($line->array_options['options_length']) && !empty($line->array_options['options_length'])) {
+                                        $length = floatval($line->array_options['options_length']);
+                                    } elseif (isset($line->array_options['options_longueur']) && !empty($line->array_options['options_longueur'])) {
+                                        $length = floatval($line->array_options['options_longueur']);
+                                    } elseif (isset($line->array_options['options_long']) && !empty($line->array_options['options_long'])) {
+                                        $length = floatval($line->array_options['options_long']);
+                                    }
+                                    
+                                    // Width variations
+                                    if (isset($line->array_options['options_width']) && !empty($line->array_options['options_width'])) {
+                                        $width = floatval($line->array_options['options_width']);
+                                    } elseif (isset($line->array_options['options_largeur']) && !empty($line->array_options['options_largeur'])) {
+                                        $width = floatval($line->array_options['options_largeur']);
+                                    } elseif (isset($line->array_options['options_larg']) && !empty($line->array_options['options_larg'])) {
+                                        $width = floatval($line->array_options['options_larg']);
+                                    }
+                                    
+                                    // Color variations
+                                    if (isset($line->array_options['options_color']) && !empty($line->array_options['options_color'])) {
+                                        $color = $line->array_options['options_color'];
+                                    } elseif (isset($line->array_options['options_couleur']) && !empty($line->array_options['options_couleur'])) {
+                                        $color = $line->array_options['options_couleur'];
+                                    }
+                                }
+                                
                                 $data['products'][] = array(
                                     'id' => $product->id,
                                     'ref' => $product->ref,
                                     'label' => $product->label,
                                     'weight' => (!empty($product->weight) ? $product->weight : 1.0),
-                                    'length' => 1000,
-                                    'width' => 100,
-                                    'color' => 'Standard',
+                                    'length' => $length,
+                                    'width' => $width,
+                                    'color' => $color,
                                     'total' => $line->qty,
                                     'used' => 0
                                 );
@@ -140,6 +173,30 @@ $morehtmlref .= '</div>';
 dol_banner_tab($object, 'ref', $linkback, 1, 'ref', 'ref', $morehtmlref);
 
 print '<div class="fichecenter">';
+
+// DEBUG: Show available extrafields for debugging
+$first_product_line = null;
+if (!empty($object->lines)) {
+    foreach ($object->lines as $line) {
+        if ($line->fk_product > 0) {
+            $temp_product = new Product($db);
+            $temp_product->fetch($line->fk_product);
+            if ($temp_product->type == 0) { // Only products, not services
+                $first_product_line = $line;
+                break;
+            }
+        }
+    }
+}
+
+if ($first_product_line && !empty($first_product_line->array_options)) {
+    print '<div style="background: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 4px; font-size: 12px;">';
+    print '<strong>🔍 DEBUG - Extrafields disponibles dans la première ligne produit :</strong><br>';
+    foreach ($first_product_line->array_options as $key => $value) {
+        print "• <code>$key</code> = " . (is_null($value) ? 'null' : htmlspecialchars($value)) . "<br>";
+    }
+    print '</div>';
+}
 ?>
 
 <style>
@@ -273,6 +330,12 @@ print '<div class="fichecenter">';
             margin-bottom: 8px;
         }
 
+        .product-dimensions {
+            font-size: 11px;
+            color: #666;
+            margin: 4px 0;
+        }
+
         .quantity-info {
             display: flex;
             align-items: center;
@@ -346,6 +409,32 @@ print '<div class="fichecenter">';
             overflow-y: auto;
         }
 
+        .colis-item {
+            background: white;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            border-left: 4px solid #FF9800;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .colis-item:hover {
+            background: #fff3e0;
+            transform: translateX(5px);
+        }
+
+        .colis-header {
+            font-weight: bold;
+            color: #FF9800;
+            margin-bottom: 5px;
+        }
+
+        .colis-info {
+            color: #666;
+            font-size: 14px;
+        }
+
         .empty-state {
             text-align: center;
             color: #999;
@@ -374,6 +463,7 @@ print '<div class="fichecenter">';
             max-height: 200px;
             overflow-y: auto;
             display: none;
+            z-index: 9999;
         }
 
         /* Modales custom */
@@ -464,6 +554,8 @@ print '<div class="fichecenter">';
                 <select id="sortSelect" class="sort-select">
                     <option value="ref">Trier par Référence</option>
                     <option value="name">Trier par Nom</option>
+                    <option value="length">Trier par Longueur</option>
+                    <option value="width">Trier par Largeur</option>
                 </select>
             </div>
         </div>
@@ -514,6 +606,7 @@ let colis = [];
 
 // Configuration
 const ORDER_ID = <?php echo $object->id; ?>;
+const TOKEN = '<?php echo newToken(); ?>';
 
 // Fonction de debug
 function debugLog(message) {
@@ -543,6 +636,7 @@ function showMessage(message) {
 async function apiCall(action, data = {}) {
     const formData = new FormData();
     formData.append('action', action);
+    formData.append('token', TOKEN);
     formData.append('id', ORDER_ID);
     
     for (const [key, value] of Object.entries(data)) {
@@ -557,13 +651,14 @@ async function apiCall(action, data = {}) {
         });
         
         const text = await response.text();
-        debugLog(`Response: ${text.substring(0, 200)}...`);
+        debugLog(`Response (${text.length} chars): ${text.substring(0, 200)}...`);
         
         try {
             return JSON.parse(text);
         } catch (parseError) {
             debugLog(`JSON Parse Error: ${parseError.message}`);
-            return { success: false, error: 'Invalid JSON response' };
+            debugLog(`Full response: ${text}`);
+            return { success: false, error: 'Invalid JSON response', rawResponse: text };
         }
     } catch (error) {
         debugLog('Erreur API: ' + error.message);
@@ -580,8 +675,11 @@ async function loadData() {
         debugLog(`Chargé ${products.length} produits`);
         renderInventory();
     } else {
-        debugLog('Erreur lors du chargement des données');
-        showMessage('Erreur lors du chargement des données');
+        debugLog('Erreur lors du chargement des données: ' + JSON.stringify(result));
+        if (result && result.rawResponse) {
+            debugLog('Réponse brute: ' + result.rawResponse.substring(0, 500));
+        }
+        showMessage('Erreur lors du chargement des données. Consultez la console de debug.');
     }
 }
 
@@ -593,6 +691,8 @@ function renderInventory() {
         container.innerHTML = '<div class="empty-state">Aucun produit trouvé dans cette commande</div>';
         return;
     }
+
+    debugLog(`Rendu de ${products.length} produits`);
 
     products.forEach(product => {
         const percentage = (product.used / product.total) * 100;
@@ -608,6 +708,9 @@ function renderInventory() {
                 <span class="product-color">${product.color}</span>
             </div>
             <div class="product-name">${product.label}</div>
+            <div class="product-dimensions">
+                L: ${product.length}mm × l: ${product.width}mm
+            </div>
             <div class="quantity-info">
                 <span class="quantity-used">${product.used}</span>
                 <span>/</span>
@@ -648,6 +751,7 @@ async function addNewColis() {
         showMessage(`Colis ${newColis.numero} créé avec succès`);
         renderColisOverview();
     } else {
+        debugLog('Erreur création colis: ' + JSON.stringify(result));
         showMessage('Erreur lors de la création du colis');
     }
 }
@@ -663,10 +767,10 @@ function renderColisOverview() {
 
     colis.forEach(c => {
         const colisElement = document.createElement('div');
-        colisElement.style.cssText = 'background: white; padding: 15px; margin: 10px 0; border-radius: 8px; border-left: 4px solid #FF9800;';
+        colisElement.className = 'colis-item';
         colisElement.innerHTML = `
-            <strong>📦 Colis ${c.numero}</strong>
-            <div style="color: #666; margin-top: 5px;">${c.products.length} produit(s)</div>
+            <div class="colis-header">📦 Colis ${c.numero}</div>
+            <div class="colis-info">${c.products.length} produit(s) • 0.0 kg</div>
         `;
         container.appendChild(colisElement);
     });
@@ -690,7 +794,9 @@ function setupEventListeners() {
         header.addEventListener('dblclick', function() {
             const debugConsole = document.getElementById('debugConsole');
             if (debugConsole) {
-                debugConsole.style.display = debugConsole.style.display === 'none' ? 'block' : 'none';
+                const isVisible = debugConsole.style.display !== 'none';
+                debugConsole.style.display = isVisible ? 'none' : 'block';
+                debugLog(isVisible ? 'Console masquée' : 'Console affichée');
             }
         });
     }
@@ -701,6 +807,7 @@ function setupEventListeners() {
 // Initialisation
 document.addEventListener('DOMContentLoaded', function() {
     debugLog('DOM chargé, initialisation...');
+    debugLog(`Configuration: ORDER_ID=${ORDER_ID}, TOKEN présent=${TOKEN ? 'oui' : 'non'}`);
     setupEventListeners();
     loadData();
     debugLog('Initialisation terminée - Double-cliquez sur le titre pour la console');
