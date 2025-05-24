@@ -10,7 +10,7 @@
 /**
  * \file        ficheproduction.php
  * \ingroup     ficheproduction
- * \brief       Page de gestion du colisage avec interface drag & drop moderne
+ * \brief       Interface drag & drop de colisage - Reproduction exacte de la maquette
  */
 
 // Load Dolibarr environment
@@ -51,7 +51,7 @@ if ($id > 0 || !empty($ref)) {
         exit;
     }
     
-    // IMPORTANT: Load the thirdparty object
+    // Load the thirdparty object
     $object->fetch_thirdparty();
 } else {
     header('Location: '.dol_buildpath('/commande/list.php', 1));
@@ -72,7 +72,6 @@ $linkback = '<a href="'.dol_buildpath('/commande/list.php', 1).'?restore_lastsea
 $morehtmlref = '<div class="refidno">';
 $morehtmlref .= $form->editfieldkey("RefCustomer", 'ref_client', $object->ref_client, $object, 0, 'string', '', 0, 1);
 $morehtmlref .= $form->editfieldval("RefCustomer", 'ref_client', $object->ref_client, $object, 0, 'string', '', null, null, '', 1);
-// Check if thirdparty exists before calling getNomUrl
 if (is_object($object->thirdparty)) {
     $morehtmlref .= '<br>'.$object->thirdparty->getNomUrl(1, 'customer');
 } else {
@@ -624,6 +623,23 @@ print '<div class="fichecenter">';
         .status-indicator.warning { background: #FF9800; }
         .status-indicator.error { background: #f44336; }
 
+        /* Debug styles */
+        .debug-console {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            max-width: 300px;
+            max-height: 200px;
+            overflow-y: auto;
+            display: none;
+        }
+
         /* Modales custom */
         .modal-overlay {
             position: fixed;
@@ -717,7 +733,7 @@ print '<div class="fichecenter">';
 </style>
 
 <div class="header">
-    <h1>🚀 Prototype - Gestionnaire de Colisage v2.0</h1>
+    <h1>🚀 Gestionnaire de Colisage v2.0</h1>
     <div class="subtitle">Interface drag & drop pour colis mixtes - Commande <?php echo $object->ref; ?> (<?php echo count($object->lines); ?> produits commandés)</div>
 </div>
 
@@ -748,7 +764,7 @@ print '<div class="fichecenter">';
         </div>
         
         <div class="inventory-list" id="inventoryList">
-            <!-- Généré par JavaScript -->
+            <div class="empty-state">Chargement des produits...</div>
         </div>
     </div>
 
@@ -786,6 +802,9 @@ print '<div class="fichecenter">';
     </div>
 </div>
 
+<!-- Console de debug -->
+<div class="debug-console" id="debugConsole"></div>
+
 <!-- Modales custom -->
 <div class="modal-overlay" id="confirmModal">
     <div class="modal-content">
@@ -810,933 +829,718 @@ print '<div class="fichecenter">';
     </div>
 </div>
 
-<?php
-print '</div>'; // End fichecenter
-print dol_get_fiche_end();
-
-// Load products from the actual order with extrafields from order lines
-$products_from_order = array();
-if (is_array($object->lines) && count($object->lines) > 0) {
-    foreach ($object->lines as $line) {
-        if ($line->fk_product > 0) {
-            $product = new Product($db);
-            $product->fetch($line->fk_product);
-            
-            // Only include products (type 0), not services (type 1)
-            if ($product->type != 0) {
-                continue; // Skip services
-            }
-            
-            // Get dimensions from order line extrafields (not from product)
-            $length = 1000; // default
-            $width = 100;   // default
-            $color = 'Standard'; // default
-            
-            // Try to get length from extrafields (common variations)
-            if (isset($line->array_options['options_length']) && !empty($line->array_options['options_length'])) {
-                $length = floatval($line->array_options['options_length']);
-            } elseif (isset($line->array_options['options_longueur']) && !empty($line->array_options['options_longueur'])) {
-                $length = floatval($line->array_options['options_longueur']);
-            } elseif (isset($line->array_options['options_long']) && !empty($line->array_options['options_long'])) {
-                $length = floatval($line->array_options['options_long']);
-            }
-            
-            // Try to get width from extrafields (common variations)
-            if (isset($line->array_options['options_width']) && !empty($line->array_options['options_width'])) {
-                $width = floatval($line->array_options['options_width']);
-            } elseif (isset($line->array_options['options_largeur']) && !empty($line->array_options['options_largeur'])) {
-                $width = floatval($line->array_options['options_largeur']);
-            } elseif (isset($line->array_options['options_larg']) && !empty($line->array_options['options_larg'])) {
-                $width = floatval($line->array_options['options_larg']);
-            }
-            
-            // Try to get color from extrafields (common variations)
-            if (isset($line->array_options['options_color']) && !empty($line->array_options['options_color'])) {
-                $color = $line->array_options['options_color'];
-            } elseif (isset($line->array_options['options_couleur']) && !empty($line->array_options['options_couleur'])) {
-                $color = $line->array_options['options_couleur'];
-            } elseif (!empty($product->color)) {
-                $color = $product->color;
-            }
-            
-            $products_from_order[] = array(
-                'id' => $product->id,
-                'ref' => $product->ref,
-                'name' => $product->label,
-                'color' => $color,
-                'used' => 0,
-                'total' => $line->qty,
-                'weight' => (!empty($product->weight) ? $product->weight : 1.0),
-                'length' => $length,
-                'width' => $width,
-                'line_id' => $line->rowid
-            );
-        }
-    }
-}
-
-// Convert PHP array to JavaScript
-$products_json = json_encode($products_from_order);
-
-// DEBUG: Show available extrafields for first product line (not service)
-$first_product_line = null;
-foreach ($object->lines as $line) {
-    if ($line->fk_product > 0) {
-        $temp_product = new Product($db);
-        $temp_product->fetch($line->fk_product);
-        if ($temp_product->type == 0) { // Only products, not services
-            $first_product_line = $line;
-            break;
-        }
-    }
-}
-
-if ($first_product_line && !empty($first_product_line->array_options)) {
-    print '<div style="background: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 4px; font-size: 12px;">';
-    print '<strong>🔍 DEBUG - Extrafields disponibles dans la première ligne produit :</strong><br>';
-    foreach ($first_product_line->array_options as $key => $value) {
-        print "• <code>$key</code> = " . (is_null($value) ? 'null' : $value) . "<br>";
-    }
-    print '</div>';
-}
-?>
-
 <script type="text/javascript">
-        // Variables globales
-        let products = <?php echo $products_json; ?>;
+// Variables globales
+let products = [];
+let colis = [];
+let selectedColis = null;
+let draggedProduct = null;
+let draggedColisLine = null;
+let currentSort = 'ref';
+let currentFilter = 'all';
 
-        // Default products if none in order
-        if (products.length === 0) {
-            products = [
-                { id: 1, ref: 'PROD-A1', name: 'Profilé Aluminium Standard', color: 'Naturel', used: 15, total: 50, weight: 2.5, length: 6000, width: 40 },
-                { id: 2, ref: 'PROD-A2', name: 'Profilé Aluminium Renforcé', color: 'Naturel', used: 8, total: 25, weight: 3.2, length: 6000, width: 60 },
-                { id: 3, ref: 'PROD-B1', name: 'Panneau Composite', color: 'Blanc', used: 12, total: 30, weight: 1.8, length: 3000, width: 1500 },
-                { id: 4, ref: 'PROD-B2', name: 'Panneau Composite', color: 'Gris', used: 5, total: 20, weight: 1.8, length: 2000, width: 1200 },
-                { id: 5, ref: 'PROD-C1', name: 'Visserie Inox M6x20', color: 'Acier', used: 0, total: 100, weight: 0.1, length: 20, width: 6 },
-                { id: 6, ref: 'PROD-D1', name: 'Joint Étanchéité EPDM', color: 'Noir', used: 20, total: 20, weight: 0.3, length: 10000, width: 15 }
-            ];
-        }
+// Configuration
+const ORDER_ID = <?php echo $object->id; ?>;
+const TOKEN = '<?php echo newToken(); ?>';
 
-        let colis = [
-            { 
-                id: 1, 
-                number: 1, 
-                products: [
-                    { productId: products[0] ? products[0].id : 1, quantity: 5, weight: 12.5 },
-                    { productId: products[1] ? products[1].id : 3, quantity: 3, weight: 5.4 }
-                ],
-                totalWeight: 17.9,
-                maxWeight: 25,
-                status: 'ok',
-                multiple: 1
-            },
-            { 
-                id: 2, 
-                number: 2, 
-                products: [
-                    { productId: products[1] ? products[1].id : 2, quantity: 2, weight: 6.4 }
-                ],
-                totalWeight: 6.4,
-                maxWeight: 25,
-                status: 'ok',
-                multiple: 1
+// Fonction de debug
+function debugLog(message) {
+    console.log('🔧 ' + message);
+    const debugConsole = document.getElementById('debugConsole');
+    if (debugConsole) {
+        debugConsole.innerHTML += new Date().toLocaleTimeString() + ': ' + message + '<br>';
+        debugConsole.scrollTop = debugConsole.scrollHeight;
+    }
+}
+
+// Modales custom identiques à la maquette
+function showConfirm(message) {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('confirmModal');
+        const messageEl = document.getElementById('confirmMessage');
+        const okBtn = document.getElementById('confirmOk');
+        const cancelBtn = document.getElementById('confirmCancel');
+
+        messageEl.textContent = message;
+        modal.classList.add('show');
+
+        const cleanup = () => {
+            modal.classList.remove('show');
+            okBtn.removeEventListener('click', handleOk);
+            cancelBtn.removeEventListener('click', handleCancel);
+        };
+
+        const handleOk = () => {
+            cleanup();
+            resolve(true);
+        };
+
+        const handleCancel = () => {
+            cleanup();
+            resolve(false);
+        };
+
+        okBtn.addEventListener('click', handleOk);
+        cancelBtn.addEventListener('click', handleCancel);
+    });
+}
+
+function showPrompt(message, defaultValue = '') {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('promptModal');
+        const messageEl = document.getElementById('promptMessage');
+        const inputEl = document.getElementById('promptInput');
+        const okBtn = document.getElementById('promptOk');
+        const cancelBtn = document.getElementById('promptCancel');
+
+        messageEl.textContent = message;
+        inputEl.value = defaultValue;
+        modal.classList.add('show');
+        
+        setTimeout(() => inputEl.focus(), 100);
+
+        const cleanup = () => {
+            modal.classList.remove('show');
+            okBtn.removeEventListener('click', handleOk);
+            cancelBtn.removeEventListener('click', handleCancel);
+            inputEl.removeEventListener('keypress', handleKeypress);
+        };
+
+        const handleOk = () => {
+            const value = inputEl.value.trim();
+            cleanup();
+            resolve(value || null);
+        };
+
+        const handleCancel = () => {
+            cleanup();
+            resolve(null);
+        };
+
+        const handleKeypress = (e) => {
+            if (e.key === 'Enter') {
+                handleOk();
+            } else if (e.key === 'Escape') {
+                handleCancel();
             }
-        ];
+        };
 
-        let selectedColis = null;
-        let draggedProduct = null;
-        let draggedColisLine = null;
-        let currentSort = 'ref';
-        let currentFilter = 'all';
+        okBtn.addEventListener('click', handleOk);
+        cancelBtn.addEventListener('click', handleCancel);
+        inputEl.addEventListener('keypress', handleKeypress);
+    });
+}
 
-        // Fonction de debug
-        function debugLog(message) {
-            console.log(message);
+// API AJAX Functions
+async function apiCall(action, data = {}) {
+    const formData = new FormData();
+    formData.append('action', action);
+    formData.append('token', TOKEN);
+    formData.append('id', ORDER_ID);
+    
+    for (const [key, value] of Object.entries(data)) {
+        formData.append(key, value);
+    }
+
+    try {
+        const response = await fetch(window.location.href, {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (response.headers.get('content-type')?.includes('application/json')) {
+            return await response.json();
+        } else {
+            throw new Error('Response is not JSON');
         }
+    } catch (error) {
+        debugLog('Erreur API: ' + error.message);
+        return { success: false, error: error.message };
+    }
+}
 
-        // Modales custom
-        function showConfirm(message) {
-            return new Promise((resolve) => {
-                const modal = document.getElementById('confirmModal');
-                const messageEl = document.getElementById('confirmMessage');
-                const okBtn = document.getElementById('confirmOk');
-                const cancelBtn = document.getElementById('confirmCancel');
-
-                messageEl.textContent = message;
-                modal.classList.add('show');
-
-                const cleanup = () => {
-                    modal.classList.remove('show');
-                    okBtn.removeEventListener('click', handleOk);
-                    cancelBtn.removeEventListener('click', handleCancel);
-                };
-
-                const handleOk = () => {
-                    cleanup();
-                    resolve(true);
-                };
-
-                const handleCancel = () => {
-                    cleanup();
-                    resolve(false);
-                };
-
-                okBtn.addEventListener('click', handleOk);
-                cancelBtn.addEventListener('click', handleCancel);
-            });
+async function loadData() {
+    debugLog('Chargement des données...');
+    const result = await apiCall('ficheproduction_get_data');
+    
+    if (result && result.products) {
+        products = result.products;
+        colis = result.colis || [];
+        debugLog(`Chargé ${products.length} produits et ${colis.length} colis`);
+        
+        renderInventory();
+        renderColisOverview();
+        
+        if (colis.length > 0) {
+            selectColis(colis[0]);
         }
+    } else {
+        debugLog('Erreur lors du chargement des données');
+    }
+}
 
-        function showPrompt(message, defaultValue = '') {
-            return new Promise((resolve) => {
-                const modal = document.getElementById('promptModal');
-                const messageEl = document.getElementById('promptMessage');
-                const inputEl = document.getElementById('promptInput');
-                const okBtn = document.getElementById('promptOk');
-                const cancelBtn = document.getElementById('promptCancel');
-
-                messageEl.textContent = message;
-                inputEl.value = defaultValue;
-                modal.classList.add('show');
-                
-                setTimeout(() => inputEl.focus(), 100);
-
-                const cleanup = () => {
-                    modal.classList.remove('show');
-                    okBtn.removeEventListener('click', handleOk);
-                    cancelBtn.removeEventListener('click', handleCancel);
-                    inputEl.removeEventListener('keypress', handleKeypress);
-                };
-
-                const handleOk = () => {
-                    const value = inputEl.value.trim();
-                    cleanup();
-                    resolve(value || null);
-                };
-
-                const handleCancel = () => {
-                    cleanup();
-                    resolve(null);
-                };
-
-                const handleKeypress = (e) => {
-                    if (e.key === 'Enter') {
-                        handleOk();
-                    } else if (e.key === 'Escape') {
-                        handleCancel();
-                    }
-                };
-
-                okBtn.addEventListener('click', handleOk);
-                cancelBtn.addEventListener('click', handleCancel);
-                inputEl.addEventListener('keypress', handleKeypress);
-            });
-        }
-
-        // Fonctions principales
-        function addNewColis() {
-            debugLog('Ajout nouveau colis');
-            const newId = Math.max(...colis.map(c => c.id)) + 1;
-            const newNumber = Math.max(...colis.map(c => c.number)) + 1;
-            
-            const newColis = {
-                id: newId,
-                number: newNumber,
-                products: [],
-                totalWeight: 0,
-                maxWeight: 25,
-                status: 'ok',
-                multiple: 1
-            };
-
-            colis.push(newColis);
-            renderColisOverview();
+async function addNewColis() {
+    debugLog('Ajout nouveau colis');
+    const result = await apiCall('ficheproduction_add_colis');
+    
+    if (result && result.success) {
+        await loadData(); // Recharger les données
+        // Sélectionner le nouveau colis
+        const newColis = colis.find(c => c.id == result.colis_id);
+        if (newColis) {
             selectColis(newColis);
         }
+    }
+}
 
-        async function deleteColis(colisId) {
-            debugLog(`Tentative suppression colis ID: ${colisId}`);
-            
-            const confirmed = await showConfirm('Êtes-vous sûr de vouloir supprimer ce colis ?');
-            if (!confirmed) {
-                debugLog('Suppression annulée par utilisateur');
-                return;
-            }
+async function deleteColis(colisId) {
+    debugLog(`Tentative suppression colis ID: ${colisId}`);
+    
+    const confirmed = await showConfirm('Êtes-vous sûr de vouloir supprimer ce colis ?');
+    if (!confirmed) {
+        debugLog('Suppression annulée par utilisateur');
+        return;
+    }
 
-            const coliData = colis.find(c => c.id === colisId);
-            if (!coliData) {
-                debugLog('ERREUR: Colis non trouvé');
-                await showConfirm('Erreur: Colis non trouvé');
-                return;
-            }
-            
-            // Remettre tous les produits dans l'inventaire
-            coliData.products.forEach(p => {
-                const product = products.find(prod => prod.id === p.productId);
-                if (product) {
-                    const quantityToRestore = p.quantity * coliData.multiple;
-                    product.used -= quantityToRestore;
-                }
-            });
+    const result = await apiCall('ficheproduction_delete_colis', { colis_id: colisId });
+    
+    if (result && result.success) {
+        await loadData(); // Recharger les données
+        selectedColis = null;
+        renderColisDetail();
+    }
+}
 
-            // Supprimer le colis
-            const colisIndex = colis.findIndex(c => c.id === colisId);
-            if (colisIndex > -1) {
-                colis.splice(colisIndex, 1);
-            }
-            
-            // Déselectionner si c'était le colis sélectionné
-            if (selectedColis && selectedColis.id === colisId) {
-                selectedColis = null;
-            }
+async function addProductToColis(colisId, productId, quantity) {
+    debugLog(`Ajout produit ${productId} (qté: ${quantity}) au colis ${colisId}`);
+    
+    const result = await apiCall('ficheproduction_add_product', {
+        colis_id: colisId,
+        product_id: productId,
+        quantite: quantity
+    });
+    
+    if (result && result.success) {
+        await loadData(); // Recharger les données
+        // Resélectionner le colis courant
+        const currentColis = colis.find(c => c.id == colisId);
+        if (currentColis) {
+            selectColis(currentColis);
+        }
+    } else {
+        await showConfirm('Erreur lors de l\'ajout du produit');
+    }
+}
 
-            // Re-render
-            renderInventory();
-            renderColisOverview();
-            renderColisDetail();
+async function removeProductFromColis(colisId, productId) {
+    const result = await apiCall('ficheproduction_remove_product', {
+        colis_id: colisId,
+        product_id: productId
+    });
+    
+    if (result && result.success) {
+        await loadData(); // Recharger les données
+        // Resélectionner le colis courant
+        const currentColis = colis.find(c => c.id == colisId);
+        if (currentColis) {
+            selectColis(currentColis);
+        }
+    }
+}
+
+async function updateProductQuantity(colisId, productId, newQuantity) {
+    const result = await apiCall('ficheproduction_update_quantity', {
+        colis_id: colisId,
+        product_id: productId,
+        quantite: newQuantity
+    });
+    
+    if (result && result.success) {
+        await loadData(); // Recharger les données
+        // Resélectionner le colis courant
+        const currentColis = colis.find(c => c.id == colisId);
+        if (currentColis) {
+            selectColis(currentColis);
+        }
+    } else {
+        await showConfirm('Erreur lors de la mise à jour de la quantité');
+    }
+}
+
+async function updateColisMultiple(colisId, multiple) {
+    const result = await apiCall('ficheproduction_update_multiple', {
+        colis_id: colisId,
+        multiple: multiple
+    });
+    
+    if (result && result.success) {
+        await loadData(); // Recharger les données
+        // Resélectionner le colis courant
+        const currentColis = colis.find(c => c.id == colisId);
+        if (currentColis) {
+            selectColis(currentColis);
+        }
+    }
+}
+
+// Interface rendering functions - Identiques à la maquette
+function renderInventory() {
+    const container = document.getElementById('inventoryList');
+    container.innerHTML = '';
+
+    // Trier les produits selon le critère sélectionné
+    const sortedProducts = [...products].sort((a, b) => {
+        switch(currentSort) {
+            case 'ref': return a.ref.localeCompare(b.ref);
+            case 'name': return a.label.localeCompare(b.label);
+            case 'length': return b.length - a.length;
+            case 'width': return b.width - a.width;
+            case 'color': return a.color.localeCompare(b.color);
+            default: return 0;
+        }
+    });
+
+    // Filtrer les produits
+    const filteredProducts = sortedProducts.filter(product => {
+        const available = product.total - product.used;
+        switch(currentFilter) {
+            case 'available': return available > 0 && product.used === 0;
+            case 'partial': return available > 0 && product.used > 0;
+            case 'exhausted': return available === 0;
+            default: return true;
+        }
+    });
+
+    filteredProducts.forEach(product => {
+        const available = product.total - product.used;
+        const percentage = (product.used / product.total) * 100;
+        let status = 'available';
+        
+        if (available === 0) status = 'exhausted';
+        else if (product.used > 0) status = 'partial';
+
+        const productElement = document.createElement('div');
+        productElement.className = `product-item ${status}`;
+        productElement.draggable = status !== 'exhausted';
+        productElement.dataset.productId = product.id;
+
+        productElement.innerHTML = `
+            <div class="product-header">
+                <span class="product-ref">${product.ref}</span>
+                <span class="product-color">${product.color || 'Standard'}</span>
+            </div>
+            <div class="product-name">${product.label}</div>
+            <div style="font-size: 11px; color: #666; margin: 4px 0;">
+                L: ${product.length || 0}mm × l: ${product.width || 0}mm
+            </div>
+            <div class="quantity-info">
+                <span class="quantity-used">${product.used}</span>
+                <span>/</span>
+                <span class="quantity-total">${product.total}</span>
+                <div class="quantity-bar">
+                    <div class="quantity-progress" style="width: ${percentage}%"></div>
+                </div>
+            </div>
+            <div class="status-indicator ${status === 'exhausted' ? 'error' : status === 'partial' ? 'warning' : ''}"></div>
+        `;
+
+        // Événements drag & drop
+        productElement.addEventListener('dragstart', function(e) {
+            draggedProduct = product;
+            this.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'copy';
+        });
+
+        productElement.addEventListener('dragend', function(e) {
+            this.classList.remove('dragging');
+            draggedProduct = null;
+        });
+
+        container.appendChild(productElement);
+    });
+}
+
+function renderColisOverview() {
+    const tbody = document.getElementById('colisTableBody');
+    tbody.innerHTML = '';
+
+    colis.forEach(c => {
+        const weightPercentage = (c.poids_total / c.poids_max) * 100;
+        let statusIcon = '✅';
+        let statusClass = '';
+        if (weightPercentage > 90) {
+            statusIcon = '⚠️';
+            statusClass = 'warning';
+        } else if (weightPercentage > 100) {
+            statusIcon = '❌';
+            statusClass = 'error';
         }
 
-        async function showDuplicateDialog(colisId) {
-            const coliData = colis.find(c => c.id === colisId);
-            if (!coliData) {
-                await showConfirm('Erreur: Colis non trouvé');
-                return;
-            }
+        const multipleDisplay = c.multiple_colis > 1 ? ` (×${c.multiple_colis})` : '';
 
-            const currentMultiple = coliData.multiple || 1;
+        // Ligne d'en-tête pour le colis
+        const headerRow = document.createElement('tr');
+        headerRow.className = 'colis-group-header';
+        headerRow.dataset.colisId = c.id;
+        if (selectedColis && selectedColis.id === c.id) {
+            headerRow.classList.add('selected');
+        }
+
+        headerRow.innerHTML = `
+            <td colspan="6">
+                <strong>📦 Colis ${c.numero_colis}${multipleDisplay}</strong>
+                <span style="margin-left: 15px; color: #666;">
+                    ${c.products ? c.products.length : 0} produit${c.products && c.products.length > 1 ? 's' : ''} • 
+                    ${c.poids_total ? c.poids_total.toFixed(1) : '0.0'} kg • 
+                    ${statusIcon}
+                </span>
+            </td>
+        `;
+
+        // Event listener pour sélectionner le colis
+        headerRow.addEventListener('click', () => {
+            selectColis(c);
+        });
+
+        tbody.appendChild(headerRow);
+
+        // Lignes pour chaque produit dans le colis
+        if (!c.products || c.products.length === 0) {
+            const emptyRow = document.createElement('tr');
+            emptyRow.className = 'colis-group-item';
+            emptyRow.innerHTML = `
+                <td></td>
+                <td colspan="5" style="font-style: italic; color: #999; padding: 10px;">
+                    Colis vide - Glissez des produits ici
+                </td>
+            `;
+            
+            // Drop zone pour colis vide
+            setupDropZone(emptyRow, c.id);
+            tbody.appendChild(emptyRow);
+        } else {
+            c.products.forEach((productInColis, index) => {
+                const product = products.find(p => p.id == productInColis.product_id);
+                if (!product) return;
+
+                const productRow = document.createElement('tr');
+                productRow.className = 'colis-group-item';
+                productRow.dataset.colisId = c.id;
+                productRow.dataset.productId = product.id;
+
+                productRow.innerHTML = `
+                    <td></td>
+                    <td>
+                        <div class="product-label">
+                            <span>${product.label}</span>
+                            <span class="product-color-badge">${product.color || 'Standard'}</span>
+                        </div>
+                        <div style="font-size: 11px; color: #666;">${product.ref}</div>
+                    </td>
+                    <td style="font-weight: bold; text-align: right; vertical-align: top;">
+                        ${productInColis.quantite}
+                        ${c.multiple_colis > 1 ? `<div style="font-size: 10px; color: #666;">×${c.multiple_colis} = ${productInColis.quantite * c.multiple_colis}</div>` : ''}
+                    </td>
+                    <td style="font-weight: bold; text-align: left; vertical-align: top;">
+                        ${product.length || 0}×${product.width || 0}
+                        <div style="font-size: 10px; color: #666;">${productInColis.poids_total ? productInColis.poids_total.toFixed(1) : '0.0'}kg</div>
+                    </td>
+                    <td class="${statusClass}" style="text-align: center;">
+                        ${statusIcon}
+                    </td>
+                    <td>
+                        <button class="btn-small btn-edit" title="Modifier quantité" 
+                                data-colis-id="${c.id}" data-product-id="${product.id}">📝</button>
+                        <button class="btn-small btn-delete" title="Supprimer" 
+                                data-colis-id="${c.id}" data-product-id="${product.id}">🗑️</button>
+                        ${index === 0 ? `<button class="btn-small btn-duplicate" title="Dupliquer colis" 
+                                                data-colis-id="${c.id}">×${c.multiple_colis}</button>` : ''}
+                    </td>
+                `;
+
+                // Event listeners pour les boutons
+                setupProductRowButtons(productRow, c, product, productInColis);
+                setupDropZone(productRow, c.id);
+                tbody.appendChild(productRow);
+            });
+        }
+    });
+}
+
+function setupProductRowButtons(productRow, coli, product, productInColis) {
+    const editBtn = productRow.querySelector('.btn-edit');
+    const deleteBtn = productRow.querySelector('.btn-delete');
+    const duplicateBtn = productRow.querySelector('.btn-duplicate');
+
+    if (editBtn) {
+        editBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const newQuantity = await showPrompt(
+                `Nouvelle quantité pour ${product.ref} :`,
+                productInColis.quantite.toString()
+            );
+            if (newQuantity !== null && !isNaN(newQuantity) && parseInt(newQuantity) > 0) {
+                await updateProductQuantity(coli.id, product.id, parseInt(newQuantity));
+            }
+        });
+    }
+
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const confirmed = await showConfirm(
+                `Supprimer ${product.ref} du colis ${coli.numero_colis} ?`
+            );
+            if (confirmed) {
+                removeProductFromColis(coli.id, product.id);
+            }
+        });
+    }
+
+    if (duplicateBtn) {
+        duplicateBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const currentMultiple = coli.multiple_colis || 1;
             const message = `Combien de fois créer ce colis identique ?\n\nActuellement: ${currentMultiple} colis`;
             const newMultiple = await showPrompt(message, currentMultiple.toString());
             
             if (newMultiple !== null && !isNaN(newMultiple) && parseInt(newMultiple) > 0) {
-                updateColisMultiple(colisId, parseInt(newMultiple));
-            } else if (newMultiple !== null) {
-                await showConfirm('Veuillez saisir un nombre entier positif');
+                updateColisMultiple(coli.id, parseInt(newMultiple));
             }
-        }
-
-        async function updateColisMultiple(colisId, multiple) {
-            const coliData = colis.find(c => c.id === colisId);
-            if (!coliData) return;
-
-            const oldMultiple = coliData.multiple;
-            const newMultiple = parseInt(multiple);
-            
-            if (isNaN(newMultiple) || newMultiple < 1) {
-                await showConfirm('Le nombre de colis doit être un entier positif');
-                return;
-            }
-
-            // Calculer la différence pour ajuster les quantités utilisées
-            const multipleDiff = newMultiple - oldMultiple;
-            
-            // Mettre à jour les quantités utilisées pour chaque produit
-            for (const p of coliData.products) {
-                const product = products.find(prod => prod.id === p.productId);
-                if (product) {
-                    product.used += p.quantity * multipleDiff;
-                    
-                    // Vérifier qu'on ne dépasse pas le total disponible
-                    if (product.used > product.total) {
-                        await showConfirm(`Attention: ${product.ref} - Quantité dépassée! Utilisé: ${product.used}, Total: ${product.total}`);
-                        // Revenir à l'ancienne valeur
-                        product.used -= p.quantity * multipleDiff;
-                        return;
-                    }
-                }
-            }
-
-            coliData.multiple = newMultiple;
-            
-            renderInventory();
-            renderColisOverview();
-            if (selectedColis && selectedColis.id === colisId) {
-                renderColisDetail();
-            }
-        }
-
-        function removeProductFromColis(colisId, productId) {
-            const coliData = colis.find(c => c.id === colisId);
-            const productInColis = coliData ? coliData.products.find(p => p.productId === productId) : null;
-            
-            if (!coliData || !productInColis) return;
-
-            // Remettre les quantités dans l'inventaire (tenir compte des multiples)
-            const product = products.find(p => p.id === productId);
-            if (product) {
-                product.used -= productInColis.quantity * coliData.multiple;
-            }
-
-            // Supprimer le produit du colis
-            const productIndex = coliData.products.findIndex(p => p.productId === productId);
-            if (productIndex > -1) {
-                coliData.products.splice(productIndex, 1);
-            }
-            
-            // Recalculer le poids total
-            coliData.totalWeight = coliData.products.reduce((sum, p) => sum + p.weight, 0);
-
-            // Re-render
-            renderInventory();
-            renderColisOverview();
-            renderColisDetail();
-        }
-
-        function updateProductQuantity(colisId, productId, newQuantity) {
-            const coliData = colis.find(c => c.id === colisId);
-            const productInColis = coliData ? coliData.products.find(p => p.productId === productId) : null;
-            const product = products.find(p => p.id === productId);
-            
-            if (!productInColis || !product || !coliData) return;
-
-            const oldQuantity = productInColis.quantity;
-            const quantityDiff = parseInt(newQuantity) - oldQuantity;
-
-            // Vérifier la disponibilité (tenir compte des multiples)
-            const totalQuantityNeeded = quantityDiff * coliData.multiple;
-            const available = product.total - product.used;
-            
-            if (totalQuantityNeeded > available) {
-                alert(`Quantité insuffisante ! Disponible: ${available}, Besoin: ${totalQuantityNeeded}`);
-                // Remettre l'ancienne valeur dans l'input
-                const input = document.querySelector(`input[data-product-id="${productId}"]`);
-                if (input) input.value = oldQuantity;
-                return;
-            }
-
-            // Mettre à jour les quantités
-            productInColis.quantity = parseInt(newQuantity);
-            productInColis.weight = productInColis.quantity * product.weight;
-            product.used += totalQuantityNeeded;
-
-            // Recalculer le poids total
-            coliData.totalWeight = coliData.products.reduce((sum, p) => sum + p.weight, 0);
-
-            // Re-render
-            renderInventory();
-            renderColisOverview();
-            renderColisDetail();
-        }
-
-        function renderInventory() {
-            const container = document.getElementById('inventoryList');
-            container.innerHTML = '';
-
-            // Trier les produits selon le critère sélectionné
-            const sortedProducts = [...products].sort((a, b) => {
-                switch(currentSort) {
-                    case 'ref': return a.ref.localeCompare(b.ref);
-                    case 'name': return a.name.localeCompare(b.name);
-                    case 'length': return b.length - a.length;
-                    case 'width': return b.width - a.width;
-                    case 'color': return a.color.localeCompare(b.color);
-                    default: return 0;
-                }
-            });
-
-            // Filtrer les produits
-            const filteredProducts = sortedProducts.filter(product => {
-                const available = product.total - product.used;
-                switch(currentFilter) {
-                    case 'available': return available > 0 && product.used === 0;
-                    case 'partial': return available > 0 && product.used > 0;
-                    case 'exhausted': return available === 0;
-                    default: return true;
-                }
-            });
-
-            filteredProducts.forEach(product => {
-                const available = product.total - product.used;
-                const percentage = (product.used / product.total) * 100;
-                let status = 'available';
-                
-                if (available === 0) status = 'exhausted';
-                else if (product.used > 0) status = 'partial';
-
-                const productElement = document.createElement('div');
-                productElement.className = `product-item ${status}`;
-                productElement.draggable = status !== 'exhausted';
-                productElement.dataset.productId = product.id;
-
-                productElement.innerHTML = `
-                    <div class="product-header">
-                        <span class="product-ref">${product.ref}</span>
-                        <span class="product-color">${product.color}</span>
-                    </div>
-                    <div class="product-name">${product.name}</div>
-                    <div style="font-size: 11px; color: #666; margin: 4px 0;">
-                        L: ${product.length}mm × l: ${product.width}mm
-                    </div>
-                    <div class="quantity-info">
-                        <span class="quantity-used">${product.used}</span>
-                        <span>/</span>
-                        <span class="quantity-total">${product.total}</span>
-                        <div class="quantity-bar">
-                            <div class="quantity-progress" style="width: ${percentage}%"></div>
-                        </div>
-                    </div>
-                    <div class="status-indicator ${status === 'exhausted' ? 'error' : status === 'partial' ? 'warning' : ''}"></div>
-                `;
-
-                // Événements drag & drop
-                productElement.addEventListener('dragstart', function(e) {
-                    draggedProduct = product;
-                    this.classList.add('dragging');
-                    e.dataTransfer.effectAllowed = 'copy';
-                });
-
-                productElement.addEventListener('dragend', function(e) {
-                    this.classList.remove('dragging');
-                    draggedProduct = null;
-                });
-
-                container.appendChild(productElement);
-            });
-        }
-
-        function renderColisOverview() {
-            const tbody = document.getElementById('colisTableBody');
-            tbody.innerHTML = '';
-
-            colis.forEach(c => {
-                const weightPercentage = (c.totalWeight / c.maxWeight) * 100;
-                let statusIcon = '✅';
-                let statusClass = '';
-                if (weightPercentage > 90) {
-                    statusIcon = '⚠️';
-                    statusClass = 'warning';
-                } else if (weightPercentage > 100) {
-                    statusIcon = '❌';
-                    statusClass = 'error';
-                }
-
-                const multipleDisplay = c.multiple > 1 ? ` (×${c.multiple})` : '';
-
-                // Ligne d'en-tête pour le colis
-                const headerRow = document.createElement('tr');
-                headerRow.className = 'colis-group-header';
-                headerRow.dataset.colisId = c.id;
-                if (selectedColis && selectedColis.id === c.id) {
-                    headerRow.classList.add('selected');
-                }
-
-                headerRow.innerHTML = `
-                    <td colspan="6">
-                        <strong>📦 Colis ${c.number}${multipleDisplay}</strong>
-                        <span style="margin-left: 15px; color: #666;">
-                            ${c.products.length} produit${c.products.length > 1 ? 's' : ''} • 
-                            ${c.totalWeight.toFixed(1)} kg • 
-                            ${statusIcon}
-                        </span>
-                    </td>
-                `;
-
-                // Event listener pour sélectionner le colis
-                headerRow.addEventListener('click', () => {
-                    selectColis(c);
-                });
-
-                tbody.appendChild(headerRow);
-
-                // Lignes pour chaque produit dans le colis
-                if (c.products.length === 0) {
-                    const emptyRow = document.createElement('tr');
-                    emptyRow.className = 'colis-group-item';
-                    emptyRow.innerHTML = `
-                        <td></td>
-                        <td colspan="5" style="font-style: italic; color: #999; padding: 10px;">
-                            Colis vide - Glissez des produits ici
-                        </td>
-                    `;
-                    
-                    // Drop zone pour colis vide
-                    emptyRow.addEventListener('dragover', function(e) {
-                        e.preventDefault();
-                        this.style.background = '#e8f5e8';
-                    });
-
-                    emptyRow.addEventListener('dragleave', function(e) {
-                        this.style.background = '';
-                    });
-
-                    emptyRow.addEventListener('drop', async function(e) {
-                        e.preventDefault();
-                        this.style.background = '';
-                        if (draggedProduct) {
-                            await addProductToColis(c.id, draggedProduct.id, 1);
-                        }
-                    });
-
-                    tbody.appendChild(emptyRow);
-                } else {
-                    c.products.forEach((productInColis, index) => {
-                        const product = products.find(p => p.id === productInColis.productId);
-                        if (!product) return;
-
-                        const productRow = document.createElement('tr');
-                        productRow.className = 'colis-group-item';
-                        productRow.dataset.colisId = c.id;
-                        productRow.dataset.productId = product.id;
-
-                        productRow.innerHTML = `
-                            <td></td>
-                            <td>
-                                <div class="product-label">
-                                    <span>${product.name}</span>
-                                    <span class="product-color-badge">${product.color}</span>
-                                </div>
-                                <div style="font-size: 11px; color: #666;">${product.ref}</div>
-                            </td>
-                            <td style="font-weight: bold; text-align: right; vertical-align: top;">
-                                ${productInColis.quantity}
-                                ${c.multiple > 1 ? `<div style="font-size: 10px; color: #666;">×${c.multiple} = ${productInColis.quantity * c.multiple}</div>` : ''}
-                            </td>
-                            <td style="font-weight: bold; text-align: left; vertical-align: top;">
-                                ${product.length}×${product.width}
-                                <div style="font-size: 10px; color: #666;">${productInColis.weight.toFixed(1)}kg</div>
-                            </td>
-                            <td class="${statusClass}" style="text-align: center;">
-                                ${statusIcon}
-                            </td>
-                            <td>
-                                <button class="btn-small btn-edit" title="Modifier quantité" 
-                                        data-colis-id="${c.id}" data-product-id="${product.id}">📝</button>
-                                <button class="btn-small btn-delete" title="Supprimer" 
-                                        data-colis-id="${c.id}" data-product-id="${product.id}">🗑️</button>
-                                ${index === 0 ? `<button class="btn-small btn-duplicate" title="Dupliquer colis" 
-                                                        data-colis-id="${c.id}">×${c.multiple}</button>` : ''}
-                            </td>
-                        `;
-
-                        // Event listeners pour les boutons
-                        const editBtn = productRow.querySelector('.btn-edit');
-                        const deleteBtn = productRow.querySelector('.btn-delete');
-                        const duplicateBtn = productRow.querySelector('.btn-duplicate');
-
-                        if (editBtn) {
-                            editBtn.addEventListener('click', async (e) => {
-                                e.stopPropagation();
-                                const newQuantity = await showPrompt(
-                                    `Nouvelle quantité pour ${product.ref} :`,
-                                    productInColis.quantity.toString()
-                                );
-                                if (newQuantity !== null && !isNaN(newQuantity) && parseInt(newQuantity) > 0) {
-                                    await updateProductQuantity(c.id, product.id, parseInt(newQuantity));
-                                }
-                            });
-                        }
-
-                        if (deleteBtn) {
-                            deleteBtn.addEventListener('click', async (e) => {
-                                e.stopPropagation();
-                                const confirmed = await showConfirm(
-                                    `Supprimer ${product.ref} du colis ${c.number} ?`
-                                );
-                                if (confirmed) {
-                                    removeProductFromColis(c.id, product.id);
-                                }
-                            });
-                        }
-
-                        if (duplicateBtn) {
-                            duplicateBtn.addEventListener('click', async (e) => {
-                                e.stopPropagation();
-                                await showDuplicateDialog(c.id);
-                            });
-                        }
-
-                        // Drop zone sur les lignes de produits
-                        productRow.addEventListener('dragover', function(e) {
-                            e.preventDefault();
-                            this.style.background = '#e8f5e8';
-                        });
-
-                        productRow.addEventListener('dragleave', function(e) {
-                            this.style.background = '';
-                        });
-
-                        productRow.addEventListener('drop', async function(e) {
-                            e.preventDefault();
-                            this.style.background = '';
-                            if (draggedProduct) {
-                                await addProductToColis(c.id, draggedProduct.id, 1);
-                            }
-                        });
-
-                        tbody.appendChild(productRow);
-                    });
-                }
-            });
-        }
-
-        function selectColis(coliData) {
-            selectedColis = coliData;
-            renderColisOverview();
-            renderColisDetail();
-        }
-
-        function renderColisDetail() {
-            const container = document.getElementById('colisDetail');
-            
-            if (!selectedColis) {
-                container.innerHTML = '<div class="empty-state">Sélectionnez un colis pour voir les détails</div>';
-                return;
-            }
-
-            const weightPercentage = (selectedColis.totalWeight / selectedColis.maxWeight) * 100;
-            let weightStatus = 'ok';
-            if (weightPercentage > 90) weightStatus = 'danger';
-            else if (weightPercentage > 70) weightStatus = 'warning';
-
-            const multipleSection = selectedColis.multiple > 1 ? 
-                `<div class="duplicate-controls">
-                    <span>📦 Ce colis sera créé</span>
-                    <input type="number" value="${selectedColis.multiple}" min="1" max="100" 
-                           class="duplicate-input" id="multipleInput">
-                    <span>fois identique(s)</span>
-                    <span style="margin-left: 10px; font-weight: bold;">
-                        Total: ${(selectedColis.totalWeight * selectedColis.multiple).toFixed(1)} kg
-                    </span>
-                </div>` : '';
-
-            container.innerHTML = `
-                <div class="colis-detail-header">
-                    <h3 class="colis-detail-title">📦 Colis ${selectedColis.number}</h3>
-                    <button class="btn-delete-colis" id="deleteColisBtn">🗑️ Supprimer</button>
-                </div>
-
-                ${multipleSection}
-
-                <div class="constraints-section">
-                    <div class="constraint-item">
-                        <div class="constraint-label">Poids:</div>
-                        <div class="constraint-values">
-                            ${selectedColis.totalWeight.toFixed(1)} / ${selectedColis.maxWeight} kg
-                        </div>
-                        <div class="constraint-bar">
-                            <div class="constraint-progress ${weightStatus}" style="width: ${Math.min(weightPercentage, 100)}%"></div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="colis-content" id="colisContent">
-                    ${selectedColis.products.map((p, index) => {
-                        const product = products.find(prod => prod.id === p.productId);
-                        return `
-                            <div class="colis-line" draggable="true" data-line-index="${index}">
-                                <span class="drag-handle">⋮⋮</span>
-                                <span class="line-product">${product.ref} - ${product.name}</span>
-                                <input type="number" class="line-quantity" value="${p.quantity}" min="1" 
-                                       data-product-id="${p.productId}">
-                                <span class="line-weight">${p.weight.toFixed(1)} kg</span>
-                                <button class="btn-remove-line" data-product-id="${p.productId}">✕</button>
-                            </div>
-                        `;
-                    }).join('')}
-                    <div class="drop-hint">Glissez un produit ici pour l'ajouter</div>
-                </div>
-            `;
-
-            // Event listeners pour les boutons et inputs
-            
-            // Bouton supprimer colis
-            const deleteBtn = document.getElementById('deleteColisBtn');
-            if (deleteBtn) {
-                deleteBtn.addEventListener('click', async (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    await deleteColis(selectedColis.id);
-                });
-            }
-
-            // Input pour les multiples
-            const multipleInput = document.getElementById('multipleInput');
-            if (multipleInput) {
-                multipleInput.addEventListener('change', async (e) => {
-                    await updateColisMultiple(selectedColis.id, e.target.value);
-                });
-            }
-
-            // Boutons supprimer ligne
-            const removeLineBtns = container.querySelectorAll('.btn-remove-line');
-            removeLineBtns.forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const productId = parseInt(e.target.dataset.productId);
-                    removeProductFromColis(selectedColis.id, productId);
-                });
-            });
-
-            // Inputs quantité
-            const quantityInputs = container.querySelectorAll('.line-quantity');
-            quantityInputs.forEach(input => {
-                input.addEventListener('change', async (e) => {
-                    const productId = parseInt(e.target.dataset.productId);
-                    await updateProductQuantity(selectedColis.id, productId, e.target.value);
-                });
-            });
-
-            // Setup drop zone pour le contenu du colis
-            const colisContent = document.getElementById('colisContent');
-            if (colisContent) {
-                colisContent.addEventListener('dragover', function(e) {
-                    e.preventDefault();
-                    this.classList.add('drop-zone-active');
-                });
-
-                colisContent.addEventListener('dragleave', function(e) {
-                    this.classList.remove('drop-zone-active');
-                });
-
-                colisContent.addEventListener('drop', async function(e) {
-                    e.preventDefault();
-                    this.classList.remove('drop-zone-active');
-                    if (draggedProduct) {
-                        await addProductToColis(selectedColis.id, draggedProduct.id, 1);
-                    } else if (draggedColisLine !== null) {
-                        // Réorganisation des produits dans le colis
-                        reorderProductInColis(draggedColisLine.colisId, draggedColisLine.fromIndex, getDropIndex(e));
-                    }
-                });
-
-                // Setup drag & drop pour réorganiser les produits
-                const colisLines = container.querySelectorAll('.colis-line');
-                colisLines.forEach((line, index) => {
-                    line.addEventListener('dragstart', function(e) {
-                        draggedColisLine = {
-                            colisId: selectedColis.id,
-                            fromIndex: index
-                        };
-                        this.classList.add('dragging');
-                        e.dataTransfer.effectAllowed = 'move';
-                    });
-
-                    line.addEventListener('dragend', function(e) {
-                        this.classList.remove('dragging');
-                        draggedColisLine = null;
-                    });
-                });
-            }
-        }
-
-        function addProductToColis(colisId, productId, quantity) {
-            const coliData = colis.find(c => c.id === colisId);
-            const product = products.find(p => p.id === productId);
-            
-            if (!coliData || !product) return;
-
-            // Vérifier la disponibilité
-            const available = product.total - product.used;
-            if (available < quantity) {
-                alert(`Quantité insuffisante ! Disponible: ${available}, Demandé: ${quantity}`);
-                return;
-            }
-
-            // Vérifier si le produit est déjà dans le colis
-            const existingProduct = coliData.products.find(p => p.productId === productId);
-            
-            if (existingProduct) {
-                existingProduct.quantity += quantity;
-                existingProduct.weight = existingProduct.quantity * product.weight;
-            } else {
-                coliData.products.push({
-                    productId: productId,
-                    quantity: quantity,
-                    weight: quantity * product.weight
-                });
-            }
-
-            // Recalculer le poids total
-            coliData.totalWeight = coliData.products.reduce((sum, p) => sum + p.weight, 0);
-
-            // Mettre à jour les quantités utilisées (tenir compte des multiples)
-            product.used += quantity * coliData.multiple;
-
-            // Re-render
-            renderInventory();
-            renderColisOverview();
-            if (selectedColis && selectedColis.id === colisId) {
-                renderColisDetail();
-            }
-        }
-
-        function reorderProductInColis(colisId, fromIndex, toIndex) {
-            const coliData = colis.find(c => c.id === colisId);
-            if (!coliData || fromIndex === toIndex) return;
-
-            // Réorganiser les produits
-            const product = coliData.products.splice(fromIndex, 1)[0];
-            coliData.products.splice(toIndex, 0, product);
-
-            // Re-render
-            renderColisDetail();
-        }
-
-        function getDropIndex(event) {
-            const colisContent = document.getElementById('colisContent');
-            const lines = Array.from(colisContent.querySelectorAll('.colis-line'));
-            const mouseY = event.clientY;
-
-            for (let i = 0; i < lines.length; i++) {
-                const rect = lines[i].getBoundingClientRect();
-                if (mouseY < rect.top + rect.height / 2) {
-                    return i;
-                }
-            }
-            return lines.length;
-        }
-
-        function setupEventListeners() {
-            // Recherche
-            const searchBox = document.getElementById('searchBox');
-            if (searchBox) {
-                searchBox.addEventListener('input', function(e) {
-                    const searchTerm = e.target.value.toLowerCase();
-                    const productItems = document.querySelectorAll('.product-item');
-                    
-                    productItems.forEach(item => {
-                        const text = item.textContent.toLowerCase();
-                        item.style.display = text.includes(searchTerm) ? 'block' : 'none';
-                    });
-                });
-            }
-
-            // Filtre
-            const filterSelect = document.getElementById('filterSelect');
-            if (filterSelect) {
-                filterSelect.addEventListener('change', function(e) {
-                    currentFilter = e.target.value;
-                    renderInventory();
-                });
-            }
-
-            // Tri
-            const sortSelect = document.getElementById('sortSelect');
-            if (sortSelect) {
-                sortSelect.addEventListener('change', function(e) {
-                    currentSort = e.target.value;
-                    renderInventory();
-                });
-            }
-
-            // Bouton Nouveau Colis
-            const addNewColisBtn = document.getElementById('addNewColisBtn');
-            if (addNewColisBtn) {
-                addNewColisBtn.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    addNewColis();
-                });
-            }
-        }
-
-        // Initialisation
-        document.addEventListener('DOMContentLoaded', function() {
-            renderInventory();
-            renderColisOverview();
-            setupEventListeners();
         });
+    }
+}
+
+function setupDropZone(element, colisId) {
+    element.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        this.style.background = '#e8f5e8';
+    });
+
+    element.addEventListener('dragleave', function(e) {
+        this.style.background = '';
+    });
+
+    element.addEventListener('drop', async function(e) {
+        e.preventDefault();
+        this.style.background = '';
+        if (draggedProduct) {
+            await addProductToColis(colisId, draggedProduct.id, 1);
+        }
+    });
+}
+
+function selectColis(coliData) {
+    debugLog(`Sélection colis ${coliData.id}`);
+    selectedColis = coliData;
+    renderColisOverview();
+    renderColisDetail();
+}
+
+function renderColisDetail() {
+    const container = document.getElementById('colisDetail');
+    
+    if (!selectedColis) {
+        container.innerHTML = '<div class="empty-state">Sélectionnez un colis pour voir les détails</div>';
+        return;
+    }
+
+    const weightPercentage = (selectedColis.poids_total / selectedColis.poids_max) * 100;
+    let weightStatus = 'ok';
+    if (weightPercentage > 90) weightStatus = 'danger';
+    else if (weightPercentage > 70) weightStatus = 'warning';
+
+    const multipleSection = selectedColis.multiple_colis > 1 ? 
+        `<div class="duplicate-controls">
+            <span>📦 Ce colis sera créé</span>
+            <input type="number" value="${selectedColis.multiple_colis}" min="1" max="100" 
+                   class="duplicate-input" id="multipleInput">
+            <span>fois identique(s)</span>
+            <span style="margin-left: 10px; font-weight: bold;">
+                Total: ${(selectedColis.poids_total * selectedColis.multiple_colis).toFixed(1)} kg
+            </span>
+        </div>` : '';
+
+    container.innerHTML = `
+        <div class="colis-detail-header">
+            <h3 class="colis-detail-title">📦 Colis ${selectedColis.numero_colis}</h3>
+            <button class="btn-delete-colis" id="deleteColisBtn">🗑️ Supprimer</button>
+        </div>
+
+        ${multipleSection}
+
+        <div class="constraints-section">
+            <div class="constraint-item">
+                <div class="constraint-label">Poids:</div>
+                <div class="constraint-values">
+                    ${selectedColis.poids_total ? selectedColis.poids_total.toFixed(1) : '0.0'} / ${selectedColis.poids_max} kg
+                </div>
+                <div class="constraint-bar">
+                    <div class="constraint-progress ${weightStatus}" style="width: ${Math.min(weightPercentage, 100)}%"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="colis-content" id="colisContent">
+            ${selectedColis.products ? selectedColis.products.map((p, index) => {
+                const product = products.find(prod => prod.id == p.product_id);
+                if (!product) return '';
+                return `
+                    <div class="colis-line" draggable="true" data-line-index="${index}">
+                        <span class="drag-handle">⋮⋮</span>
+                        <span class="line-product">${product.ref} - ${product.label}</span>
+                        <input type="number" class="line-quantity" value="${p.quantite}" min="1" 
+                               data-product-id="${p.product_id}">
+                        <span class="line-weight">${p.poids_total ? p.poids_total.toFixed(1) : '0.0'} kg</span>
+                        <button class="btn-remove-line" data-product-id="${p.product_id}">✕</button>
+                    </div>
+                `;
+            }).join('') : ''}
+            <div class="drop-hint">Glissez un produit ici pour l'ajouter</div>
+        </div>
+    `;
+
+    // Event listeners pour les boutons et inputs
+    setupColisDetailEvents();
+}
+
+function setupColisDetailEvents() {
+    // Bouton supprimer colis
+    const deleteBtn = document.getElementById('deleteColisBtn');
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            await deleteColis(selectedColis.id);
+        });
+    }
+
+    // Input pour les multiples
+    const multipleInput = document.getElementById('multipleInput');
+    if (multipleInput) {
+        multipleInput.addEventListener('change', async (e) => {
+            await updateColisMultiple(selectedColis.id, e.target.value);
+        });
+    }
+
+    // Boutons supprimer ligne
+    const removeLineBtns = document.querySelectorAll('.btn-remove-line');
+    removeLineBtns.forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const productId = parseInt(e.target.dataset.productId);
+            const confirmed = await showConfirm('Supprimer cette ligne ?');
+            if (confirmed) {
+                removeProductFromColis(selectedColis.id, productId);
+            }
+        });
+    });
+
+    // Inputs quantité
+    const quantityInputs = document.querySelectorAll('.line-quantity');
+    quantityInputs.forEach(input => {
+        input.addEventListener('change', async (e) => {
+            const productId = parseInt(e.target.dataset.productId);
+            await updateProductQuantity(selectedColis.id, productId, e.target.value);
+        });
+    });
+
+    // Setup drop zone pour le contenu du colis
+    const colisContent = document.getElementById('colisContent');
+    if (colisContent) {
+        colisContent.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            this.classList.add('drop-zone-active');
+        });
+
+        colisContent.addEventListener('dragleave', function(e) {
+            this.classList.remove('drop-zone-active');
+        });
+
+        colisContent.addEventListener('drop', async function(e) {
+            e.preventDefault();
+            this.classList.remove('drop-zone-active');
+            if (draggedProduct) {
+                await addProductToColis(selectedColis.id, draggedProduct.id, 1);
+            }
+        });
+    }
+}
+
+function setupEventListeners() {
+    debugLog('Configuration des event listeners');
+    
+    // Recherche
+    const searchBox = document.getElementById('searchBox');
+    if (searchBox) {
+        searchBox.addEventListener('input', function(e) {
+            const searchTerm = e.target.value.toLowerCase();
+            const productItems = document.querySelectorAll('.product-item');
+            
+            productItems.forEach(item => {
+                const text = item.textContent.toLowerCase();
+                item.style.display = text.includes(searchTerm) ? 'block' : 'none';
+            });
+        });
+    }
+
+    // Filtre
+    const filterSelect = document.getElementById('filterSelect');
+    if (filterSelect) {
+        filterSelect.addEventListener('change', function(e) {
+            currentFilter = e.target.value;
+            renderInventory();
+        });
+    }
+
+    // Tri
+    const sortSelect = document.getElementById('sortSelect');
+    if (sortSelect) {
+        sortSelect.addEventListener('change', function(e) {
+            currentSort = e.target.value;
+            renderInventory();
+        });
+    }
+
+    // Bouton Nouveau Colis
+    const addNewColisBtn = document.getElementById('addNewColisBtn');
+    if (addNewColisBtn) {
+        addNewColisBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            debugLog('Bouton nouveau colis cliqué');
+            addNewColis();
+        });
+    }
+
+    // Affichage/masquage de la console de debug (double-clic sur le titre)
+    const header = document.querySelector('.header h1');
+    if (header) {
+        header.addEventListener('dblclick', function() {
+            const debugConsole = document.getElementById('debugConsole');
+            if (debugConsole) {
+                debugConsole.style.display = debugConsole.style.display === 'none' ? 'block' : 'none';
+            }
+        });
+    }
+    
+    debugLog('Event listeners configurés');
+}
+
+// Initialisation - Identique à la maquette
+document.addEventListener('DOMContentLoaded', function() {
+    debugLog('DOM chargé, initialisation...');
+    setupEventListeners();
+    loadData(); // Charger les vraies données
+    debugLog('Initialisation terminée');
+    debugLog('Double-cliquez sur le titre pour afficher/masquer cette console');
+});
 </script>
 
 <?php
+print '</div>'; // End fichecenter
+print dol_get_fiche_end();
+
 llxFooter();
 $db->close();
 ?>
