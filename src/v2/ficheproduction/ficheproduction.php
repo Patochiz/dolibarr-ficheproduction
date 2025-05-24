@@ -32,6 +32,8 @@ require_once DOL_DOCUMENT_ROOT.'/contact/class/contact.class.php';
 
 // Load translations
 $langs->loadLangs(array('orders', 'products', 'companies'));
+// Load custom module translations
+$langs->load('ficheproduction@ficheproduction');
 
 // Get parameters
 $id = GETPOST('id', 'int');
