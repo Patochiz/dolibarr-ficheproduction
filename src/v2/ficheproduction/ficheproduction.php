@@ -1115,9 +1115,9 @@ if (!empty($object->lines)) {
                     <span class="product-ref">${product.name}</span>
                     <span class="product-color">${product.color}</span>
                 </div>
-                ${product.ref_ligne ? `<div class="product-ref-ligne">Réf: ${product.ref_ligne}</div>` : ''}
+                
                 <div class="product-dimensions">
-                    L: ${product.length}mm × l: ${product.width}mm
+                    L: ${product.length}mm × l: ${product.width}mm <strong>Réf: ${product.ref_ligne}</strong>
                 </div>
                 <div class="quantity-info">
                     <span class="quantity-used">${product.used}</span>
