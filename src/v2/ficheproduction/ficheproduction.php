@@ -551,6 +551,24 @@ if (!empty($object->lines)) {
             border-left: 4px solid #FF9800;
         }
 
+        .colis-header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+        }
+
+        .colis-header-left {
+            font-weight: bold;
+            color: #FF9800;
+            font-size: 16px;
+        }
+
+        .colis-header-right {
+            color: #666;
+            font-size: 14px;
+        }
+
         .colis-table .colis-group-item {
             background: #fafafa;
             border-left: 2px solid #FFE0B2;
@@ -1079,10 +1097,9 @@ if (!empty($object->lines)) {
 
             vignetteElement.innerHTML = `
                 <div class="product-header">
-                    <span class="product-ref">${product.ref}</span>
+                    <span class="product-ref">${product.name}</span>
                     <span class="product-color">${product.color}</span>
                 </div>
-                <div class="product-name">${product.name}</div>
                 <div class="product-dimensions">
                     L: ${product.length}mm × l: ${product.width}mm
                 </div>
@@ -1570,9 +1587,7 @@ if (!empty($object->lines)) {
                     statusClass = 'error';
                 }
 
-                const multipleDisplay = c.multiple > 1 ? ` (×${c.multiple})` : '';
-
-                // Ligne d'en-tête pour le colis
+                // Ligne d'en-tête pour le colis - NOUVEAU FORMAT
                 const headerRow = document.createElement('tr');
                 headerRow.className = 'colis-group-header';
                 headerRow.dataset.colisId = c.id;
@@ -1580,14 +1595,17 @@ if (!empty($object->lines)) {
                     headerRow.classList.add('selected');
                 }
 
+                // Calcul des textes pour l'affichage gauche/droite
+                const totalColis = c.multiple; // Nombre total de colis identiques
+                const leftText = totalColis > 1 ? `${totalColis} colis` : '1 colis';
+                const rightText = `Colis ${c.number} (${c.products.length} produit${c.products.length > 1 ? 's' : ''}) - ${c.totalWeight.toFixed(1)} Kg ${statusIcon}`;
+
                 headerRow.innerHTML = `
                     <td colspan="6">
-                        <strong>📦 Colis ${c.number}${multipleDisplay}</strong>
-                        <span style="margin-left: 15px; color: #666;">
-                            ${c.products.length} produit${c.products.length > 1 ? 's' : ''} • 
-                            ${c.totalWeight.toFixed(1)} kg • 
-                            ${statusIcon}
-                        </span>
+                        <div class="colis-header-content">
+                            <span class="colis-header-left">📦 ${leftText}</span>
+                            <span class="colis-header-right">${rightText}</span>
+                        </div>
                     </td>
                 `;
 
@@ -1631,7 +1649,6 @@ if (!empty($object->lines)) {
                                     <span>${product.name}</span>
                                     <span class="product-color-badge">${product.color}</span>
                                 </div>
-                                <div style="font-size: 11px; color: #666;">${product.ref}</div>
                             </td>
                             <td style="font-weight: bold; text-align: right; vertical-align: top;">
                                 ${productInColis.quantity}
@@ -1981,7 +1998,7 @@ if (!empty($object->lines)) {
         // Initialisation
         document.addEventListener('DOMContentLoaded', function() {
             debugLog('DOM chargé, initialisation...');
-            debugLog('🔧 CONFIGURATION: Interface épurée + vignettes 100% + inputs quantité');
+            debugLog('🎨 VIGNETTES MODIFIÉES : Libellé en en-tête + suppression code produit');
             
             renderInventory();
             renderColisOverview();
