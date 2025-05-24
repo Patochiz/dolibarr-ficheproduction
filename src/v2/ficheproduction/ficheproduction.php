@@ -26,6 +26,9 @@ if (!$res) {
 require_once DOL_DOCUMENT_ROOT.'/core/lib/order.lib.php';
 require_once DOL_DOCUMENT_ROOT.'/commande/class/commande.class.php';
 require_once DOL_DOCUMENT_ROOT.'/product/class/product.class.php';
+require_once DOL_DOCUMENT_ROOT.'/core/class/html.form.class.php';
+require_once DOL_DOCUMENT_ROOT.'/core/class/doleditor.class.php';
+require_once DOL_DOCUMENT_ROOT.'/contact/class/contact.class.php';
 
 // Load translations
 $langs->loadLangs(array('orders', 'products', 'companies'));
@@ -180,6 +183,7 @@ if (!empty($action) && strpos($action, 'ficheproduction_') === 0) {
 
 // Initialize objects
 $object = new Commande($db);
+$form = new Form($db);
 
 // Check permissions
 if (!$user->rights->commande->lire) {
@@ -198,13 +202,79 @@ if ($id > 0 || !empty($ref)) {
     if (method_exists($object, 'fetch_thirdparty')) {
         $object->fetch_thirdparty();
     }
+    
+    // Load lines and extrafields
+    $object->fetch_lines();
+    $object->fetch_optionals();
 } else {
     header('Location: '.dol_buildpath('/commande/list.php', 1));
     exit;
 }
 
+// Set userCanEdit - check if user has right to edit orders
+$userCanEdit = $user->rights->commande->creer ?? false;
+
+/*
+ * ACTIONS
+ */
+
+// Action pour mettre à jour la référence chantier
+if ($action == 'update_ref_chantierfp') {
+    // Récupération des données du formulaire avec sécurité
+    $ref_chantierfp = GETPOST('ref_chantierfp', 'alpha');
+    
+    // Vérification que les extrafields sont chargés
+    if (!isset($object->array_options) || !is_array($object->array_options)) {
+        $object->array_options = array();
+    }
+    
+    // Mise à jour de l'extrafield
+    $object->array_options['options_ref_chantierfp'] = $ref_chantierfp;
+    
+    // Sauvegarde avec le user courant
+    $result = $object->insertExtraFields('', $user);
+    
+    if ($result < 0) {
+        // Affichage des erreurs
+        setEventMessages($object->error, $object->errors, 'errors');
+    } else {
+        // Message de succès
+        setEventMessages($langs->trans("RecordSaved"), null);
+        // Redirection pour éviter les soumissions multiples
+        header("Location: ".$_SERVER['PHP_SELF']."?id=".$object->id);
+        exit;
+    }
+}
+
+// Action pour mettre à jour les commentaires
+if ($action == 'update_commentaires_fp') {
+    // Récupération des données du formulaire avec sécurité
+    $commentaires_fp = GETPOST('commentaires_fp', 'restricthtml');
+    
+    // Vérification que les extrafields sont chargés
+    if (!isset($object->array_options) || !is_array($object->array_options)) {
+        $object->array_options = array();
+    }
+    
+    // Mise à jour de l'extrafield
+    $object->array_options['options_commentaires_fp'] = $commentaires_fp;
+    
+    // Sauvegarde avec le user courant
+    $result = $object->insertExtraFields('', $user);
+    
+    if ($result < 0) {
+        // Affichage des erreurs
+        setEventMessages($object->error, $object->errors, 'errors');
+    } else {
+        // Message de succès
+        setEventMessages($langs->trans("RecordSaved"), null);
+        // Redirection pour éviter les soumissions multiples
+        header("Location: ".$_SERVER['PHP_SELF']."?id=".$object->id);
+        exit;
+    }
+}
+
 // Prepare objects for display
-$form = new Form($db);
 $head = commande_prepare_head($object);
 
 // Start page
@@ -244,6 +314,179 @@ if (!empty($object->lines)) {
 
 // Load external CSS file
 print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheproduction/css/ficheproduction.css', 1).'">';
+
+// NOUVELLE SECTION : Tableau récapitulatif des informations de commande (inspiré de la V1)
+print '<div style="display:flex; flex-wrap:wrap; gap:20px; margin-bottom: 20px;">';
+
+// Colonne gauche - Tableau récapitulatif
+print '<div style="flex:1; min-width:300px;">';
+print '<div class="underbanner clearboth"></div>';
+print '<table class="border centpercent tableforfield">';
+
+// Référence commande
+print '<tr><td class="titlefield">'.$langs->trans("OrderReference").':</td><td>'.$object->ref.'</td></tr>';
+
+// Client
+print '<tr><td>'.$langs->trans("CustomerName").':</td><td>'.$object->thirdparty->getNomUrl(1).'</td></tr>';
+
+// Référence chantier (extrafield ref_chantierfp)
+$ref_chantier = !empty($object->array_options['options_ref_chantier']) ? $object->array_options['options_ref_chantier'] : '';
+$ref_chantierfp = !empty($object->array_options['options_ref_chantierfp']) ? $object->array_options['options_ref_chantierfp'] : $ref_chantier;
+
+print '<tr>';
+print '<td>'.$langs->trans("ProjectReference").':</td>';
+print '<td>';
+
+if ($action == 'edit_ref_chantierfp') {
+    // Formulaire d'édition
+    print '<form method="post" action="'.$_SERVER["PHP_SELF"].'?id='.$object->id.'">';
+    print '<input type="hidden" name="token" value="'.newToken().'">';
+    print '<input type="hidden" name="action" value="update_ref_chantierfp">';
+    print '<input type="text" name="ref_chantierfp" size="40" value="'.$ref_chantierfp.'">';
+    print ' <input type="submit" class="button" value="'.$langs->trans("Save").'">';
+    print ' <a class="button button-cancel" href="'.$_SERVER["PHP_SELF"].'?id='.$object->id.'">'.$langs->trans("Cancel").'</a>';
+    print '</form>';
+} else {
+    // Affichage normal avec icône d'édition
+    print $ref_chantierfp;
+    if ($userCanEdit) {
+        print ' <a href="'.$_SERVER["PHP_SELF"].'?id='.$object->id.'&action=edit_ref_chantierfp">'.img_edit($langs->trans("Edit")).'</a>';
+    }
+}
+
+print '</td>';
+print '</tr>';
+
+// Commentaires (extrafield commentaires_fp)
+$commentaires_fp = !empty($object->array_options['options_commentaires_fp']) ? $object->array_options['options_commentaires_fp'] : '';
+
+print '<tr>';
+print '<td>'.$langs->trans("Comments").':</td>';
+print '<td>';
+
+if ($action == 'edit_commentaires_fp') {
+    // Formulaire d'édition avec éditeur WYSIWYG
+    print '<form method="post" action="'.$_SERVER["PHP_SELF"].'?id='.$object->id.'">';
+    print '<input type="hidden" name="token" value="'.newToken().'">';
+    print '<input type="hidden" name="action" value="update_commentaires_fp">';
+    
+    // Utilisation de l'éditeur Dolibarr
+    $doleditor = new DolEditor('commentaires_fp', $commentaires_fp, '', 200, 'dolibarr_notes', '', false, true, true, ROWS_5, '90%');
+    print $doleditor->Create(1);
+    
+    print '<br><input type="submit" class="button" value="'.$langs->trans("Save").'">';
+    print ' <a class="button button-cancel" href="'.$_SERVER["PHP_SELF"].'?id='.$object->id.'">'.$langs->trans("Cancel").'</a>';
+    print '</form>';
+} else {
+    // Affichage normal avec icône d'édition
+    print $commentaires_fp; // Le contenu HTML sera affiché correctement
+    if ($userCanEdit) {
+        print ' <a href="'.$_SERVER["PHP_SELF"].'?id='.$object->id.'&action=edit_commentaires_fp">'.img_edit($langs->trans("Edit")).'</a>';
+    }
+}
+
+print '</td>';
+print '</tr>';
+
+// Total colis (sera calculé dynamiquement via JavaScript)
+print '<tr>';
+print '<td>'.$langs->trans("TotalPackages").':</td>';
+print '<td><span id="total-packages">0</span></td>';
+print '</tr>';
+
+// Poids total (extrafield poids_total)
+$poids_total = !empty($object->array_options['options_poids_total']) ? $object->array_options['options_poids_total'] : 0;
+print '<tr>';
+print '<td>'.$langs->trans("TotalWeight").':</td>';
+print '<td><span id="total-weight">'.$poids_total.'</span> kg</td>';
+print '</tr>';
+
+print '</table>';
+print '</div>'; // Fermeture div colonne gauche
+
+// Colonne droite - Adresse de livraison
+print '<div style="flex:0 0 300px;">';
+print '<div class="delivery-info-box" style="padding:15px; background:#f9f9f9; border:1px solid #ddd; border-radius:4px; height:100%;">';
+print '<h4>' . $langs->trans("DeliveryInformation") . '</h4>';
+
+// Récupération des infos de livraison
+$contact_livraison = "";
+$address_livraison = "";
+$phone_livraison = "";
+$email_livraison = "";
+$note_public_livraison = "";
+
+// Récupérer les contacts associés à la commande
+$contacts = $object->liste_contact(-1, 'external', 0, 'SHIPPING');
+if (is_array($contacts) && count($contacts) > 0) {
+    foreach ($contacts as $contact) {
+        // Récupérer les détails du contact de livraison
+        $contactstatic = new Contact($db);
+        if ($contactstatic->fetch($contact['id']) > 0) {
+            $contact_livraison = $contactstatic->getFullName($langs);
+            $address_livraison = $contactstatic->address;
+            $address_livraison .= "\n" . $contactstatic->zip . " " . $contactstatic->town;
+            $address_livraison .= !empty($contactstatic->country) ? "\n" . $contactstatic->country : "";
+            
+            // Récupérer tous les numéros de téléphone disponibles
+            $phone_array = array();
+            if (!empty($contactstatic->phone_pro)) $phone_array[] = $langs->trans("Pro") . ": " . $contactstatic->phone_pro;
+            if (!empty($contactstatic->phone_perso)) $phone_array[] = $langs->trans("Personal") . ": " . $contactstatic->phone_perso;
+            if (!empty($contactstatic->phone_mobile)) $phone_array[] = $langs->trans("Mobile") . ": " . $contactstatic->phone_mobile;
+            
+            $phone_livraison = implode(" / ", $phone_array);
+            $email_livraison = $contactstatic->email;
+            
+            // Récupérer la note publique du contact
+            $note_public_livraison = $contactstatic->note_public;
+        }
+        break; // On ne prend que le premier contact de livraison
+    }
+}
+
+// Si pas de contact spécifique, on prend l'adresse de livraison de la commande
+if (empty($contact_livraison) && !empty($object->array_options['options_adresse_livraison'])) {
+    $address_livraison = $object->array_options['options_adresse_livraison'];
+}
+
+// Si toujours pas d'adresse, on prend celle du client
+if (empty($address_livraison)) {
+    $contact_livraison = $object->thirdparty->name;
+    $address_livraison = $object->thirdparty->address;
+    $address_livraison .= "\n" . $object->thirdparty->zip . " " . $object->thirdparty->town;
+    $address_livraison .= !empty($object->thirdparty->country) ? "\n" . $object->thirdparty->country : "";
+    
+    // Pour la société, on récupère les différents téléphones disponibles
+    $phone_array = array();
+    if (!empty($object->thirdparty->phone)) $phone_array[] = $langs->trans("Pro") . ": " . $object->thirdparty->phone;
+    if (!empty($object->thirdparty->fax)) $phone_array[] = $langs->trans("Fax") . ": " . $object->thirdparty->fax;
+    
+    $phone_livraison = implode(" / ", $phone_array);
+    $email_livraison = $object->thirdparty->email;
+    
+    // Récupérer la note publique de la société
+    $note_public_livraison = $object->thirdparty->note_public;
+}
+
+// Affichage des informations
+print '<p><strong>' . $langs->trans("Contact") . ':</strong> ' . $contact_livraison . '</p>';
+print '<p><strong>' . $langs->trans("Address") . ':</strong> ' . nl2br($address_livraison) . '</p>';
+if (!empty($phone_livraison)) {
+    print '<p><strong>' . $langs->trans("Phone") . ':</strong> ' . $phone_livraison . '</p>';
+}
+if (!empty($email_livraison)) {
+    print '<p><strong>' . $langs->trans("Email") . ':</strong> ' . $email_livraison . '</p>';
+}
+if (!empty($note_public_livraison)) {
+    print '<p><strong>' . $langs->trans("NotePublic") . ':</strong> ' . nl2br($note_public_livraison) . '</p>';
+}
+
+print '</div>'; // Fin box
+print '</div>'; // Fermeture div colonne droite
+
+print '</div>'; // Fermeture div layout flexbox
+// FIN NOUVELLE SECTION
+
 ?>
 
 <div class="header">
@@ -319,6 +562,43 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
     </div>
 </div>
 
+<?php
+// NOUVELLE SECTION : Signature et vérification finale (inspirée de la V1)
+print '<div class="colisage-signature" style="margin-top:30px; padding-top:20px; border-top:1px solid #ddd;">';
+print '<h3>' . $langs->trans("FinalChecks") . '</h3>';
+print '<table class="colisage-check-table" style="width:100%; border-collapse:collapse;">';
+print '<tr>';
+
+// Colonne de gauche - COLISAGE FINAL
+print '<td style="width:50%; padding:15px; vertical-align:top; border:1px solid #ddd;">';
+print '<p><strong>' . $langs->trans("FinalPackaging") . '</strong></p>';
+print '<p style="margin:10px 0;">______' . $langs->trans("Pallets") . ' ' . $langs->trans("Being") . ' ______' . $langs->trans("Packages") . '</p>';
+print '<p style="margin:10px 0;">______' . $langs->trans("Bundles") . ' ' . $langs->trans("Being") . ' ______' . $langs->trans("Packages") . '</p>';
+print '<p style="margin:10px 0;">      ' . $langs->trans("BulkPackages") . ' ______' . $langs->trans("Packages") . '</p>';
+print '<p style="margin:15px 0;"><strong>' . $langs->trans("TotalNumberOfPackages") . '</strong> : ______' . $langs->trans("Packages") . '</p>';
+print '</td>';
+
+// Colonne de droite - Vérifications et signatures
+print '<td style="width:50%; padding:15px; vertical-align:top; border:1px solid #ddd;">';
+print '<p>' . $langs->trans("ProductionSheetVerificationBy") . ' : __________</p>';
+print '<p style="height:20px;"></p>'; // Espace pour signature
+print '<p>' . $langs->trans("FinalCounting") . ' ' . $langs->trans("AndReturnDateBy") . ' : __________</p>';
+print '<p style="height:20px;"></p>'; // Espace pour signature
+print '<p>' . $langs->trans("CoilsIDUsed") . ' : __________</p>';
+print '<p style="height:20px;"></p>'; // Espace pour signature
+print '</td>';
+
+print '</tr>';
+print '</table>';
+print '</div>';
+// FIN NOUVELLE SECTION
+
+// Bouton d'impression
+print '<div class="tabsAction">';
+print '<a class="butAction" href="javascript:preparePrint();">' . $langs->trans("PrintButton") . '</a>';
+print '</div>';
+?>
+
 <!-- Console de debug -->
 <div class="debug-console" id="debugConsole"></div>
 
@@ -391,6 +671,32 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
                 debugConsole.innerHTML += new Date().toLocaleTimeString() + ': ' + message + '<br>';
                 debugConsole.scrollTop = debugConsole.scrollHeight;
             }
+        }
+
+        // Fonction pour mettre à jour les totaux dans le tableau récapitulatif
+        function updateSummaryTotals() {
+            // Calculer le nombre total de colis
+            let totalPackages = 0;
+            let totalWeight = 0;
+            
+            colis.forEach(c => {
+                totalPackages += c.multiple;
+                totalWeight += c.totalWeight * c.multiple;
+            });
+            
+            // Mettre à jour l'affichage
+            const totalPackagesElement = document.getElementById('total-packages');
+            const totalWeightElement = document.getElementById('total-weight');
+            
+            if (totalPackagesElement) {
+                totalPackagesElement.textContent = totalPackages;
+            }
+            
+            if (totalWeightElement) {
+                totalWeightElement.textContent = totalWeight.toFixed(1);
+            }
+            
+            debugLog(`Totaux mis à jour: ${totalPackages} colis, ${totalWeight.toFixed(1)} kg`);
         }
 
         // Fonction pour créer une vignette produit (utilisée dans inventaire et colis)
@@ -603,6 +909,7 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
             renderInventory();
             renderColisOverview();
             selectColis(newColis);
+            updateSummaryTotals(); // Mettre à jour les totaux
             
             return true;
         }
@@ -839,6 +1146,7 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
             colis.push(newColis);
             renderColisOverview();
             selectColis(newColis);
+            updateSummaryTotals(); // Mettre à jour les totaux
         }
 
         async function deleteColis(colisId) {
@@ -897,6 +1205,7 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
             renderInventory();
             renderColisOverview();
             renderColisDetail();
+            updateSummaryTotals(); // Mettre à jour les totaux
             
             debugLog('Interface mise à jour après suppression');
         }
@@ -969,6 +1278,7 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
             if (selectedColis && selectedColis.id === colisId) {
                 renderColisDetail();
             }
+            updateSummaryTotals(); // Mettre à jour les totaux
         }
 
         function removeProductFromColis(colisId, productId) {
@@ -1002,6 +1312,7 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
             renderInventory();
             renderColisOverview();
             renderColisDetail();
+            updateSummaryTotals(); // Mettre à jour les totaux
         }
 
         function updateProductQuantity(colisId, productId, newQuantity) {
@@ -1033,6 +1344,7 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
                 renderInventory();
                 renderColisOverview();
                 renderColisDetail();
+                updateSummaryTotals(); // Mettre à jour les totaux
                 return;
             }
 
@@ -1062,6 +1374,7 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
             renderInventory();
             renderColisOverview();
             renderColisDetail();
+            updateSummaryTotals(); // Mettre à jour les totaux
         }
 
         function renderInventory() {
@@ -1505,32 +1818,7 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
             if (selectedColis && selectedColis.id === colisId) {
                 renderColisDetail();
             }
-        }
-
-        function reorderProductInColis(colisId, fromIndex, toIndex) {
-            const coliData = colis.find(c => c.id === colisId);
-            if (!coliData || fromIndex === toIndex) return;
-
-            // Réorganiser les produits
-            const product = coliData.products.splice(fromIndex, 1)[0];
-            coliData.products.splice(toIndex, 0, product);
-
-            // Re-render
-            renderColisDetail();
-        }
-
-        function getDropIndex(event) {
-            const colisContent = document.getElementById('colisContent');
-            const lines = Array.from(colisContent.querySelectorAll('.colis-line'));
-            const mouseY = event.clientY;
-
-            for (let i = 0; i < lines.length; i++) {
-                const rect = lines[i].getBoundingClientRect();
-                if (mouseY < rect.top + rect.height / 2) {
-                    return i;
-                }
-            }
-            return lines.length;
+            updateSummaryTotals(); // Mettre à jour les totaux
         }
 
         function setupEventListeners() {
@@ -1628,15 +1916,34 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
             debugLog('Event listeners configurés');
         }
 
+        // Script pour la fonction d'impression
+        function preparePrint() {
+            // Sauvegarde l'état actuel de la page
+            var originalTitle = document.title;
+            
+            // Modifie le titre pour l'impression
+            document.title = 'Fiche de Production - <?php echo $object->ref; ?>';
+            
+            // Lance l'impression
+            window.print();
+            
+            // Restaure le titre original après l'impression
+            setTimeout(function() {
+                document.title = originalTitle;
+            }, 1000);
+        }
+
         // Initialisation
         document.addEventListener('DOMContentLoaded', function() {
             debugLog('DOM chargé, initialisation...');
             debugLog('🆕 NOUVEAU : Fonctionnalité Colis Libre ajoutée !');
+            debugLog('📋 NOUVEAU : Tableau récapitulatif des informations de commande ajouté !');
             
             renderInventory();
             renderColisOverview();
             setupEventListeners();
             loadData();
+            updateSummaryTotals(); // Initialiser les totaux
             
             debugLog('Initialisation terminée');
             debugLog('Double-cliquez sur le titre pour afficher/masquer cette console');
