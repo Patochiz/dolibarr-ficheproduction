@@ -47,16 +47,18 @@ if (!empty($action) && strpos($action, 'ficheproduction_') === 0) {
         
         switch ($action) {
             case 'ficheproduction_get_data':
-                $data = array('products' => array(), 'colis' => array());
+                $data = array('products' => array(), 'colis' => array(), 'product_groups' => array());
                 
-                // Get products from order lines
+                // Get products from order lines in the order of the command
                 if ($object->id > 0) {
                     if (empty($object->lines)) {
                         $object->fetch_lines();
                     }
                     
                     $productIndex = 1;
-                    foreach ($object->lines as $line) {
+                    $productGroups = array();
+                    
+                    foreach ($object->lines as $lineIndex => $line) {
                         if ($line->fk_product > 0) {
                             $product = new Product($db);
                             if ($product->fetch($line->fk_product) > 0 && $product->type == 0) {
@@ -104,7 +106,7 @@ if (!empty($action) && strpos($action, 'ficheproduction_') === 0) {
                                 
                                 // Only add products with quantity > 0
                                 if ($quantity > 0) {
-                                    $data['products'][] = array(
+                                    $productData = array(
                                         'id' => $productIndex++,
                                         'ref' => $product->ref,
                                         'name' => $product->label,
@@ -114,12 +116,30 @@ if (!empty($action) && strpos($action, 'ficheproduction_') === 0) {
                                         'width' => $width,
                                         'total' => $quantity, // Using extrafield "nombre" as total available
                                         'used' => 0,
-                                        'line_id' => $line->id // Store line ID for future reference
+                                        'line_id' => $line->id, // Store line ID for future reference
+                                        'line_order' => $lineIndex // Keep original order from command
                                     );
+                                    
+                                    $data['products'][] = $productData;
+                                    
+                                    // Create product groups for the selector (name + color)
+                                    $groupKey = $product->label . ' - ' . $color;
+                                    if (!isset($productGroups[$groupKey])) {
+                                        $productGroups[$groupKey] = array(
+                                            'key' => $groupKey,
+                                            'name' => $product->label,
+                                            'color' => $color,
+                                            'products' => array()
+                                        );
+                                    }
+                                    $productGroups[$groupKey]['products'][] = $productData['id'];
                                 }
                             }
                         }
                     }
+                    
+                    // Convert product groups to array
+                    $data['product_groups'] = array_values($productGroups);
                 }
                 
                 echo json_encode($data);
@@ -228,7 +248,7 @@ if (!empty($object->lines)) {
 // DEBUG: Show extrafields information
 if (!empty($debug_info)) {
     print '<div style="background: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 4px; font-size: 12px;">';
-    print '<strong>🔍 DEBUG - Informations extrafields par ligne de commande :</strong><br>';
+    print '<strong>🔍 DEBUG - Informations extrafields par ligne de commande (ordre préservé) :</strong><br>';
     foreach ($debug_info as $info) {
         print "<strong>{$info['ref']}</strong> - Qté standard: {$info['qty_standard']}, Qté nombre: {$info['qty_nombre']}<br>";
         if (!empty($info['extrafields'])) {
@@ -380,11 +400,10 @@ if (!empty($debug_info)) {
             margin-bottom: 8px;
         }
 
-        .product-quantity-source {
-            font-size: 10px;
+        .product-dimensions {
+            font-size: 11px;
             color: #666;
-            font-style: italic;
-            margin-bottom: 4px;
+            margin: 4px 0;
         }
 
         .quantity-info {
@@ -456,7 +475,7 @@ if (!empty($debug_info)) {
             padding: 15px;
             background: #f9f9f9;
             min-height: 200px;
-            max-height: 300px;
+            flex: 1;
             overflow-y: auto;
         }
 
@@ -923,24 +942,15 @@ if (!empty($debug_info)) {
     <!-- Zone Inventaire -->
     <div class="inventory-zone">
         <div class="inventory-header">
-            📦 Inventaire Produits (basé sur extrafield "nombre")
+            📦 Inventaire Produits (ordre de la commande)
         </div>
         
         <div class="inventory-controls">
             <input type="text" class="search-box" placeholder="🔍 Rechercher un produit..." id="searchBox">
             <div class="sort-controls">
-                <select id="filterSelect" class="sort-select">
+                <select id="productGroupSelect" class="sort-select">
                     <option value="all">Tous les produits</option>
-                    <option value="available">Disponibles</option>
-                    <option value="partial">Partiellement utilisés</option>
-                    <option value="exhausted">Épuisés</option>
-                </select>
-                <select id="sortSelect" class="sort-select">
-                    <option value="ref">Trier par Référence</option>
-                    <option value="name">Trier par Nom</option>
-                    <option value="length">Trier par Longueur</option>
-                    <option value="width">Trier par Largeur</option>
-                    <option value="color">Trier par Couleur</option>
+                    <!-- Options générées par JavaScript -->
                 </select>
             </div>
         </div>
@@ -1014,12 +1024,12 @@ if (!empty($debug_info)) {
 <script>
         // Variables globales
         let products = [];
+        let productGroups = [];
         let colis = [];
         let selectedColis = null;
         let draggedProduct = null;
         let draggedColisLine = null;
-        let currentSort = 'ref';
-        let currentFilter = 'all';
+        let currentProductGroup = 'all';
         let isDragging = false;
 
         // Configuration
@@ -1034,6 +1044,45 @@ if (!empty($debug_info)) {
                 debugConsole.innerHTML += new Date().toLocaleTimeString() + ': ' + message + '<br>';
                 debugConsole.scrollTop = debugConsole.scrollHeight;
             }
+        }
+
+        // Fonction pour créer une vignette produit (utilisée dans inventaire et colis)
+        function createProductVignette(product, isInColis = false) {
+            const available = product.total - product.used;
+            const percentage = (product.used / product.total) * 100;
+            let status = 'available';
+            
+            if (available === 0) status = 'exhausted';
+            else if (product.used > 0) status = 'partial';
+
+            const vignetteElement = document.createElement('div');
+            vignetteElement.className = `product-item ${status}`;
+            if (!isInColis) {
+                vignetteElement.draggable = status !== 'exhausted';
+                vignetteElement.dataset.productId = product.id;
+            }
+
+            vignetteElement.innerHTML = `
+                <div class="product-header">
+                    <span class="product-ref">${product.ref}</span>
+                    <span class="product-color">${product.color}</span>
+                </div>
+                <div class="product-name">${product.name}</div>
+                <div class="product-dimensions">
+                    L: ${product.length}mm × l: ${product.width}mm
+                </div>
+                <div class="quantity-info">
+                    <span class="quantity-used">${product.used}</span>
+                    <span>/</span>
+                    <span class="quantity-total">${product.total}</span>
+                    <div class="quantity-bar">
+                        <div class="quantity-progress" style="width: ${percentage}%"></div>
+                    </div>
+                </div>
+                <div class="status-indicator ${status === 'exhausted' ? 'error' : status === 'partial' ? 'warning' : ''}"></div>
+            `;
+
+            return vignetteElement;
         }
 
         // Modales custom
@@ -1149,22 +1198,44 @@ if (!empty($debug_info)) {
         }
 
         async function loadData() {
-            debugLog('Chargement des données (avec extrafield nombre)...');
+            debugLog('Chargement des données (ordre commande + groupes produits)...');
             const result = await apiCall('ficheproduction_get_data');
             
             if (result && result.products) {
+                // Les produits sont déjà dans l'ordre de la commande
                 products = result.products;
-                debugLog(`Chargé ${products.length} produits avec quantités basées sur extrafield "nombre"`);
+                productGroups = result.product_groups || [];
                 
-                // Debug: afficher les quantités récupérées
+                debugLog(`Chargé ${products.length} produits dans l'ordre de la commande`);
+                debugLog(`Trouvé ${productGroups.length} groupes de produits`);
+                
+                // Debug: afficher l'ordre et les groupes
                 products.forEach(product => {
-                    debugLog(`${product.ref}: ${product.total} unités disponibles (source: extrafield nombre)`);
+                    debugLog(`Ordre ${product.line_order}: ${product.ref} (${product.name} - ${product.color})`);
                 });
                 
+                populateProductGroupSelector();
                 renderInventory();
             } else {
                 debugLog('Erreur lors du chargement des données');
             }
+        }
+
+        function populateProductGroupSelector() {
+            const selector = document.getElementById('productGroupSelect');
+            
+            // Conserver l'option "Tous les produits"
+            selector.innerHTML = '<option value="all">Tous les produits</option>';
+            
+            // Ajouter les groupes de produits
+            productGroups.forEach(group => {
+                const option = document.createElement('option');
+                option.value = group.key;
+                option.textContent = `${group.name} - ${group.color}`;
+                selector.appendChild(option);
+            });
+            
+            debugLog(`Sélecteur rempli avec ${productGroups.length} groupes`);
         }
 
         // Gestion globale des zones de drop
@@ -1419,66 +1490,24 @@ if (!empty($debug_info)) {
             const container = document.getElementById('inventoryList');
             container.innerHTML = '';
 
-            // Trier les produits selon le critère sélectionné
-            const sortedProducts = [...products].sort((a, b) => {
-                switch(currentSort) {
-                    case 'ref': return a.ref.localeCompare(b.ref);
-                    case 'name': return a.name.localeCompare(b.name);
-                    case 'length': return b.length - a.length;
-                    case 'width': return b.width - a.width;
-                    case 'color': return a.color.localeCompare(b.color);
-                    default: return 0;
+            // Filtrer les produits selon le groupe sélectionné
+            let filteredProducts = products;
+            if (currentProductGroup !== 'all') {
+                const selectedGroup = productGroups.find(g => g.key === currentProductGroup);
+                if (selectedGroup) {
+                    filteredProducts = products.filter(product => selectedGroup.products.includes(product.id));
+                    debugLog(`Filtrage par groupe "${currentProductGroup}": ${filteredProducts.length} produits`);
                 }
-            });
+            }
 
-            // Filtrer les produits
-            const filteredProducts = sortedProducts.filter(product => {
-                const available = product.total - product.used;
-                switch(currentFilter) {
-                    case 'available': return available > 0 && product.used === 0;
-                    case 'partial': return available > 0 && product.used > 0;
-                    case 'exhausted': return available === 0;
-                    default: return true;
-                }
-            });
-
+            // Les produits sont déjà dans l'ordre de la commande, pas besoin de trier
             filteredProducts.forEach(product => {
-                const available = product.total - product.used;
-                const percentage = (product.used / product.total) * 100;
-                let status = 'available';
-                
-                if (available === 0) status = 'exhausted';
-                else if (product.used > 0) status = 'partial';
-
-                const productElement = document.createElement('div');
-                productElement.className = `product-item ${status}`;
-                productElement.draggable = status !== 'exhausted';
-                productElement.dataset.productId = product.id;
-
-                productElement.innerHTML = `
-                    <div class="product-header">
-                        <span class="product-ref">${product.ref}</span>
-                        <span class="product-color">${product.color}</span>
-                    </div>
-                    <div class="product-name">${product.name}</div>
-                    <div class="product-quantity-source">Quantité source: extrafield "nombre"</div>
-                    <div style="font-size: 11px; color: #666; margin: 4px 0;">
-                        L: ${product.length}mm × l: ${product.width}mm
-                    </div>
-                    <div class="quantity-info">
-                        <span class="quantity-used">${product.used}</span>
-                        <span>/</span>
-                        <span class="quantity-total">${product.total}</span>
-                        <div class="quantity-bar">
-                            <div class="quantity-progress" style="width: ${percentage}%"></div>
-                        </div>
-                    </div>
-                    <div class="status-indicator ${status === 'exhausted' ? 'error' : status === 'partial' ? 'warning' : ''}"></div>
-                `;
+                const productElement = createProductVignette(product, false);
 
                 // Événements drag & drop
                 productElement.addEventListener('dragstart', function(e) {
-                    if (status === 'exhausted') {
+                    const available = product.total - product.used;
+                    if (available === 0) {
                         e.preventDefault();
                         return;
                     }
@@ -1487,7 +1516,7 @@ if (!empty($debug_info)) {
                     draggedProduct = product;
                     this.classList.add('dragging');
                     e.dataTransfer.effectAllowed = 'copy';
-                    debugLog(`🚀 Drag start: ${product.ref} (${product.total} unités extrafield "nombre")`);
+                    debugLog(`🚀 Drag start: ${product.ref} (ordre ligne: ${product.line_order})`);
                     
                     // Activer les zones de drop après un délai pour laisser le temps au dragstart de s'exécuter
                     setTimeout(() => {
@@ -1672,7 +1701,7 @@ if (!empty($debug_info)) {
                 e.stopPropagation();
                 
                 if (draggedProduct && isDragging) {
-                    debugLog(`📍 Drop sur colis ${colisId} - Produit: ${draggedProduct.ref} (quantité extrafield "nombre": ${draggedProduct.total})`);
+                    debugLog(`📍 Drop sur colis ${colisId} - Produit: ${draggedProduct.ref} (ordre: ${draggedProduct.line_order})`);
                     addProductToColis(colisId, draggedProduct.id, 1);
                 } else {
                     debugLog(`❌ Drop échoué - draggedProduct: ${!!draggedProduct}, isDragging: ${isDragging}`);
@@ -1711,6 +1740,35 @@ if (!empty($debug_info)) {
                     </span>
                 </div>` : '';
 
+            const vignetteContainer = document.createElement('div');
+            vignetteContainer.style.display = 'flex';
+            vignetteContainer.style.flexWrap = 'wrap';
+            vignetteContainer.style.gap = '10px';
+            vignetteContainer.style.marginBottom = '20px';
+
+            selectedColis.products.forEach((p, index) => {
+                const product = products.find(prod => prod.id === p.productId);
+                if (!product) return;
+
+                // Créer une vignette identique à l'inventaire
+                const vignette = createProductVignette(product, true);
+                vignette.style.width = '200px'; // Taille fixe pour la zone de drop
+                vignette.style.marginBottom = '0';
+                
+                // Ajouter bouton supprimer
+                const removeBtn = document.createElement('button');
+                removeBtn.className = 'btn-remove-line';
+                removeBtn.textContent = '✕';
+                removeBtn.dataset.productId = p.productId;
+                removeBtn.style.position = 'absolute';
+                removeBtn.style.top = '5px';
+                removeBtn.style.left = '5px';
+                vignette.style.position = 'relative';
+                vignette.appendChild(removeBtn);
+
+                vignetteContainer.appendChild(vignette);
+            });
+
             container.innerHTML = `
                 <div class="colis-detail-header">
                     <h3 class="colis-detail-title">📦 Colis ${selectedColis.number}</h3>
@@ -1731,25 +1789,21 @@ if (!empty($debug_info)) {
                     </div>
                 </div>
 
-                <div class="colis-content" id="colisContent">
-                    ${selectedColis.products.map((p, index) => {
-                        const product = products.find(prod => prod.id === p.productId);
-                        return `
-                            <div class="colis-line" draggable="true" data-line-index="${index}">
-                                <span class="drag-handle">⋮⋮</span>
-                                <span class="line-product">${product.ref} - ${product.name}</span>
-                                <input type="number" class="line-quantity" value="${p.quantity}" min="1" 
-                                       data-product-id="${p.productId}">
-                                <span class="line-weight">${p.weight.toFixed(1)} kg</span>
-                                <button class="btn-remove-line" data-product-id="${p.productId}">✕</button>
-                            </div>
-                        `;
-                    }).join('')}
-                    <div class="drop-hint">Glissez un produit ici pour l'ajouter</div>
+                <div style="margin-bottom: 10px; font-weight: bold;">Produits dans ce colis:</div>
+                <div class="colis-content" id="colisContent" style="border: 2px dashed #ddd; border-radius: 8px; min-height: 150px; padding: 15px; position: relative;">
+                    <div class="drop-hint" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #999; font-style: italic; pointer-events: none;">
+                        ${selectedColis.products.length === 0 ? 'Glissez un produit ici pour l\'ajouter' : ''}
+                    </div>
                 </div>
             `;
 
-            // Event listeners pour les boutons et inputs - Version corrigée
+            // Ajouter les vignettes dans la zone de contenu
+            const colisContent = document.getElementById('colisContent');
+            if (selectedColis.products.length > 0) {
+                colisContent.appendChild(vignetteContainer);
+            }
+
+            // Event listeners pour les boutons et inputs
             
             // Bouton supprimer colis
             const deleteBtn = document.getElementById('deleteColisBtn');
@@ -1770,7 +1824,7 @@ if (!empty($debug_info)) {
                 });
             }
 
-            // Boutons supprimer ligne
+            // Boutons supprimer ligne (sur les vignettes)
             const removeLineBtns = container.querySelectorAll('.btn-remove-line');
             removeLineBtns.forEach(btn => {
                 btn.addEventListener('click', (e) => {
@@ -1782,37 +1836,9 @@ if (!empty($debug_info)) {
                 });
             });
 
-            // Inputs quantité
-            const quantityInputs = container.querySelectorAll('.line-quantity');
-            quantityInputs.forEach(input => {
-                input.addEventListener('change', async (e) => {
-                    const productId = parseInt(e.target.dataset.productId);
-                    await updateProductQuantity(selectedColis.id, productId, e.target.value);
-                });
-            });
-
             // Setup drop zone pour le contenu du colis
-            const colisContent = document.getElementById('colisContent');
             if (colisContent) {
                 setupDropZone(colisContent, selectedColis.id);
-
-                // Setup drag & drop pour réorganiser les produits
-                const colisLines = container.querySelectorAll('.colis-line');
-                colisLines.forEach((line, index) => {
-                    line.addEventListener('dragstart', function(e) {
-                        draggedColisLine = {
-                            colisId: selectedColis.id,
-                            fromIndex: index
-                        };
-                        this.classList.add('dragging');
-                        e.dataTransfer.effectAllowed = 'move';
-                    });
-
-                    line.addEventListener('dragend', function(e) {
-                        this.classList.remove('dragging');
-                        draggedColisLine = null;
-                    });
-                });
             }
         }
 
@@ -1908,20 +1934,12 @@ if (!empty($debug_info)) {
                 });
             }
 
-            // Filtre
-            const filterSelect = document.getElementById('filterSelect');
-            if (filterSelect) {
-                filterSelect.addEventListener('change', function(e) {
-                    currentFilter = e.target.value;
-                    renderInventory();
-                });
-            }
-
-            // Tri
-            const sortSelect = document.getElementById('sortSelect');
-            if (sortSelect) {
-                sortSelect.addEventListener('change', function(e) {
-                    currentSort = e.target.value;
+            // Sélecteur de groupe de produits
+            const productGroupSelect = document.getElementById('productGroupSelect');
+            if (productGroupSelect) {
+                productGroupSelect.addEventListener('change', function(e) {
+                    currentProductGroup = e.target.value;
+                    debugLog(`Changement groupe produit: ${currentProductGroup}`);
                     renderInventory();
                 });
             }
@@ -1953,7 +1971,7 @@ if (!empty($debug_info)) {
         // Initialisation
         document.addEventListener('DOMContentLoaded', function() {
             debugLog('DOM chargé, initialisation...');
-            debugLog('🔧 CONFIGURATION: Utilisation de l\'extrafield "nombre" pour les quantités');
+            debugLog('🔧 CONFIGURATION: Ordre commande + groupes par libellé+couleur + vignettes identiques');
             
             renderInventory();
             renderColisOverview();
