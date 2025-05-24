@@ -51,6 +51,9 @@ class FicheProductionColisLine extends CommonObject
     public $rowid;
     public $fk_colis;
     public $fk_product;
+    public $is_libre_product;
+    public $libre_product_name;
+    public $libre_product_description;
     public $quantite;
     public $poids_unitaire;
     public $poids_total;
@@ -93,6 +96,15 @@ class FicheProductionColisLine extends CommonObject
         if (isset($this->fk_product)) {
             $this->fk_product = (int) $this->fk_product;
         }
+        if (isset($this->is_libre_product)) {
+            $this->is_libre_product = (int) $this->is_libre_product;
+        }
+        if (isset($this->libre_product_name)) {
+            $this->libre_product_name = trim($this->libre_product_name);
+        }
+        if (isset($this->libre_product_description)) {
+            $this->libre_product_description = trim($this->libre_product_description);
+        }
         if (isset($this->quantite)) {
             $this->quantite = (int) $this->quantite;
         }
@@ -111,14 +123,29 @@ class FicheProductionColisLine extends CommonObject
             $this->errors[] = 'Error: fk_colis is mandatory';
             return -1;
         }
-        if (!$this->fk_product) {
-            $this->errors[] = 'Error: fk_product is mandatory';
+        
+        // Validation selon le type de produit
+        if ($this->is_libre_product) {
+            if (empty($this->libre_product_name)) {
+                $this->errors[] = 'Error: libre_product_name is mandatory for free products';
+                return -1;
+            }
+        } else {
+            if (!$this->fk_product) {
+                $this->errors[] = 'Error: fk_product is mandatory for standard products';
+                return -1;
+            }
         }
+        
         if (!$this->quantite) {
             $this->errors[] = 'Error: quantite is mandatory';
             return -1;
         }
 
+        // Set default values
+        if (!isset($this->is_libre_product)) {
+            $this->is_libre_product = 0;
+        }
         if (!isset($this->rang)) {
             $this->rang = 0;
         }
@@ -128,6 +155,9 @@ class FicheProductionColisLine extends CommonObject
         $sql = "INSERT INTO ".MAIN_DB_PREFIX.$this->table_element." (";
         $sql .= "fk_colis,";
         $sql .= "fk_product,";
+        $sql .= "is_libre_product,";
+        $sql .= "libre_product_name,";
+        $sql .= "libre_product_description,";
         $sql .= "quantite,";
         $sql .= "poids_unitaire,";
         $sql .= "poids_total,";
@@ -136,7 +166,10 @@ class FicheProductionColisLine extends CommonObject
         $sql .= "fk_user_creat";
         $sql .= ") VALUES (";
         $sql .= "".(int) $this->fk_colis.",";
-        $sql .= "".(int) $this->fk_product.",";
+        $sql .= ($this->fk_product ? "".(int) $this->fk_product : "NULL").",";
+        $sql .= "".(int) $this->is_libre_product.",";
+        $sql .= ($this->libre_product_name ? "'".$this->db->escape($this->libre_product_name)."'" : "NULL").",";
+        $sql .= ($this->libre_product_description ? "'".$this->db->escape($this->libre_product_description)."'" : "NULL").",";
         $sql .= "".(int) $this->quantite.",";
         $sql .= "".(float) $this->poids_unitaire.",";
         $sql .= "".(float) $this->poids_total.",";
@@ -181,6 +214,9 @@ class FicheProductionColisLine extends CommonObject
         $sql .= " t.rowid,";
         $sql .= " t.fk_colis,";
         $sql .= " t.fk_product,";
+        $sql .= " t.is_libre_product,";
+        $sql .= " t.libre_product_name,";
+        $sql .= " t.libre_product_description,";
         $sql .= " t.quantite,";
         $sql .= " t.poids_unitaire,";
         $sql .= " t.poids_total,";
@@ -202,6 +238,9 @@ class FicheProductionColisLine extends CommonObject
                 $this->rowid = $obj->rowid;
                 $this->fk_colis = $obj->fk_colis;
                 $this->fk_product = $obj->fk_product;
+                $this->is_libre_product = $obj->is_libre_product;
+                $this->libre_product_name = $obj->libre_product_name;
+                $this->libre_product_description = $obj->libre_product_description;
                 $this->quantite = $obj->quantite;
                 $this->poids_unitaire = $obj->poids_unitaire;
                 $this->poids_total = $obj->poids_total;
@@ -238,6 +277,15 @@ class FicheProductionColisLine extends CommonObject
         $error = 0;
 
         // Clean parameters
+        if (isset($this->is_libre_product)) {
+            $this->is_libre_product = (int) $this->is_libre_product;
+        }
+        if (isset($this->libre_product_name)) {
+            $this->libre_product_name = trim($this->libre_product_name);
+        }
+        if (isset($this->libre_product_description)) {
+            $this->libre_product_description = trim($this->libre_product_description);
+        }
         if (isset($this->quantite)) {
             $this->quantite = (int) $this->quantite;
         }
@@ -254,6 +302,9 @@ class FicheProductionColisLine extends CommonObject
         $this->db->begin();
 
         $sql = "UPDATE ".MAIN_DB_PREFIX.$this->table_element." SET";
+        $sql .= " is_libre_product = ".(int) $this->is_libre_product.",";
+        $sql .= " libre_product_name = ".($this->libre_product_name ? "'".$this->db->escape($this->libre_product_name)."'" : "NULL").",";
+        $sql .= " libre_product_description = ".($this->libre_product_description ? "'".$this->db->escape($this->libre_product_description)."'" : "NULL").",";
         $sql .= " quantite = ".(int) $this->quantite.",";
         $sql .= " poids_unitaire = ".(float) $this->poids_unitaire.",";
         $sql .= " poids_total = ".(float) $this->poids_total.",";
@@ -315,5 +366,57 @@ class FicheProductionColisLine extends CommonObject
             $this->db->commit();
             return 1;
         }
+    }
+
+    /**
+     * Create a free product line
+     *
+     * @param int $fk_colis Colis ID
+     * @param string $name Product name
+     * @param string $description Product description
+     * @param int $quantite Quantity
+     * @param float $poids_unitaire Unit weight
+     * @param User $user User object
+     * @return int <0 if KO, line ID if OK
+     */
+    public function createFreeLine($fk_colis, $name, $description, $quantite, $poids_unitaire, User $user)
+    {
+        $this->fk_colis = $fk_colis;
+        $this->fk_product = null;
+        $this->is_libre_product = 1;
+        $this->libre_product_name = $name;
+        $this->libre_product_description = $description;
+        $this->quantite = $quantite;
+        $this->poids_unitaire = $poids_unitaire;
+        $this->poids_total = $quantite * $poids_unitaire;
+        $this->rang = 0; // Will be set by colis manager
+        $this->date_creation = dol_now();
+        $this->fk_user_creat = $user->id;
+
+        return $this->create($user);
+    }
+
+    /**
+     * Get display name for the line (product name or free product name)
+     *
+     * @return string Display name
+     */
+    public function getDisplayName()
+    {
+        if ($this->is_libre_product) {
+            return $this->libre_product_name;
+        } else {
+            return $this->product_label ? $this->product_label : $this->product_ref;
+        }
+    }
+
+    /**
+     * Check if this line is a free product
+     *
+     * @return bool
+     */
+    public function isFreeProduct()
+    {
+        return (bool) $this->is_libre_product;
     }
 }
