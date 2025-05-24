@@ -247,7 +247,7 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
 ?>
 
 <div class="header">
-    <h1>🚀 Prototype - Gestionnaire de Colisage v2.0</h1>
+    <h1>🚀 Gestionnaire de Colisage v2.0</h1>
     <div class="subtitle">Interface drag & drop pour colis mixtes - Commande <?php echo $object->ref; ?> (<?php echo $product_count; ?> produits commandés)</div>
 </div>
 
@@ -394,7 +394,7 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
                 </div>
                 
                 <div class="product-dimensions">
-                    L: ${product.length}mm × l: ${product.width}mm <strong>Réf: ${product.ref_ligne}</strong>
+                    L: ${product.length}mm × l: ${product.width}mm ${product.ref_ligne ? `<strong>Réf: ${product.ref_ligne}</strong>` : ''}
                 </div>
                 <div class="quantity-info">
                     <span class="quantity-used">${product.used}</span>
