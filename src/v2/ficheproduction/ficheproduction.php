@@ -265,6 +265,15 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
                     <option value="all">Tous les produits</option>
                     <!-- Options générées par JavaScript -->
                 </select>
+                <select id="sortSelect" class="sort-select">
+                    <option value="original">📋 Ordre commande</option>
+                    <option value="length_asc">📏 Longueur ↑</option>
+                    <option value="length_desc">📏 Longueur ↓</option>
+                    <option value="width_asc">📐 Largeur ↑</option>
+                    <option value="width_desc">📐 Largeur ↓</option>
+                    <option value="name_asc">🔤 Nom A→Z</option>
+                    <option value="name_desc">🔤 Nom Z→A</option>
+                </select>
             </div>
         </div>
         
@@ -343,6 +352,7 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
         let draggedProduct = null;
         let draggedColisLine = null;
         let currentProductGroup = 'all';
+        let currentSort = 'original';
         let isDragging = false;
 
         // Configuration
@@ -409,6 +419,38 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
             `;
 
             return vignetteElement;
+        }
+
+        // Fonction de tri des produits
+        function sortProducts(productsList, sortType) {
+            const sorted = [...productsList];
+            
+            switch(sortType) {
+                case 'original':
+                    // Trier par line_order (ordre original de la commande)
+                    return sorted.sort((a, b) => a.line_order - b.line_order);
+                    
+                case 'length_asc':
+                    return sorted.sort((a, b) => a.length - b.length);
+                    
+                case 'length_desc':
+                    return sorted.sort((a, b) => b.length - a.length);
+                    
+                case 'width_asc':
+                    return sorted.sort((a, b) => a.width - b.width);
+                    
+                case 'width_desc':
+                    return sorted.sort((a, b) => b.width - a.width);
+                    
+                case 'name_asc':
+                    return sorted.sort((a, b) => a.name.localeCompare(b.name));
+                    
+                case 'name_desc':
+                    return sorted.sort((a, b) => b.name.localeCompare(a.name));
+                    
+                default:
+                    return sorted.sort((a, b) => a.line_order - b.line_order);
+            }
         }
 
         // Modales custom
@@ -821,8 +863,11 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
                 }
             }
 
-            // Les produits sont déjà dans l'ordre de la commande, pas besoin de trier
-            filteredProducts.forEach(product => {
+            // Trier les produits selon le critère sélectionné
+            const sortedProducts = sortProducts(filteredProducts, currentSort);
+            debugLog(`Tri appliqué: ${currentSort} - ${sortedProducts.length} produits`);
+
+            sortedProducts.forEach(product => {
                 const productElement = createProductVignette(product, false);
 
                 // Événements drag & drop
@@ -1265,6 +1310,16 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
                 });
             }
 
+            // Sélecteur de tri
+            const sortSelect = document.getElementById('sortSelect');
+            if (sortSelect) {
+                sortSelect.addEventListener('change', function(e) {
+                    currentSort = e.target.value;
+                    debugLog(`Changement tri: ${currentSort}`);
+                    renderInventory();
+                });
+            }
+
             // Bouton Nouveau Colis
             const addNewColisBtn = document.getElementById('addNewColisBtn');
             if (addNewColisBtn) {
@@ -1292,7 +1347,7 @@ print '<link rel="stylesheet" type="text/css" href="'.dol_buildpath('/ficheprodu
         // Initialisation
         document.addEventListener('DOMContentLoaded', function() {
             debugLog('DOM chargé, initialisation...');
-            debugLog('✅ CSS externe chargé - Séparation CSS/PHP terminée !');
+            debugLog('🔀 NOUVEAU : Sélecteur de tri par dimensions ajouté !');
             
             renderInventory();
             renderColisOverview();
