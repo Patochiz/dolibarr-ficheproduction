@@ -166,3 +166,20 @@ AutoCreateSession = Créer automatiquement une session pour les nouvelles comman
 ModuleVersion = Version du module
 Configuration = Configuration
 AdvancedSettings = Paramètres avancés
+
+#
+# Tableau d'en-tête et pied de page
+#
+FinalChecks = Vérifications finales
+FinalPackaging = Colisage final
+Pallets = Palettes
+Being = étant
+Packages = Colis
+Bundles = Fagots
+BulkPackages = Colis en vrac
+TotalNumberOfPackages = Nombre total de colis
+ProductionSheetVerificationBy = Fiche de production vérifiée par
+FinalCounting = Comptage final
+AndReturnDateBy = et date de retour par
+CoilsIDUsed = Identifiants des bobines utilisées
+PrintButton = Imprimer
