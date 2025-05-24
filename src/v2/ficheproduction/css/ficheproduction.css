@@ -17,7 +17,7 @@
 /**
  * \file        css/ficheproduction.css
  * \ingroup     ficheproduction
- * \brief       CSS file for module FicheProduction v2.0
+ * \brief       CSS file for module FicheProduction v2.0 - Gestionnaire de Colisage
  */
 
 /* Reset et variables globales */
@@ -38,18 +38,37 @@
     --transition: all 0.3s ease;
 }
 
+/* Reset de base pour l'interface colisage */
+.header * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
 /* Interface principale de colisage */
 .colisage-interface-container {
     margin: 20px 0;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
-.colisage-header {
+/* En-tête principal */
+.header {
     background: var(--primary-color);
     color: white;
     padding: 15px 20px;
     border-radius: var(--border-radius) var(--border-radius) 0 0;
     margin-bottom: 0;
+}
+
+.header h1 {
+    font-size: 24px;
+    margin-bottom: 5px;
+    font-weight: 600;
+}
+
+.header .subtitle {
+    opacity: 0.8;
+    font-size: 14px;
 }
 
 .colisage-title {
@@ -68,9 +87,11 @@
     margin: 0;
 }
 
+/* Conteneur principal */
 .colisage-container {
     display: flex;
-    height: 700px;
+    height: fit-content;
+    min-height: 700px;
     background: white;
     border-radius: 0 0 var(--border-radius) var(--border-radius);
     box-shadow: var(--shadow-medium);
@@ -84,6 +105,7 @@
     background: var(--background-light);
     display: flex;
     flex-direction: column;
+    min-height: 700px;
 }
 
 .inventory-header {
@@ -163,6 +185,7 @@
     opacity: 0.5;
     transform: rotate(3deg) scale(0.95);
     cursor: grabbing;
+    z-index: 1000;
 }
 
 .product-item.exhausted {
@@ -170,6 +193,11 @@
     background: #ffebee;
     border-color: var(--error-color);
     cursor: not-allowed;
+}
+
+.product-item.in-colis {
+    width: 100% !important;
+    margin-bottom: 10px;
 }
 
 .product-header {
@@ -192,6 +220,14 @@
     border-radius: 12px;
     font-size: 12px;
     font-weight: 500;
+}
+
+.product-ref-ligne {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: bold;
+    margin: 2px 0;
+    font-style: italic;
 }
 
 .product-name {
@@ -239,6 +275,28 @@
     height: 100%;
     background: linear-gradient(90deg, var(--success-color) 0%, var(--warning-color) 50%, var(--error-color) 100%);
     transition: width 0.3s;
+}
+
+.quantity-input-container {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 8px;
+}
+
+.quantity-input-label {
+    font-size: 12px;
+    font-weight: bold;
+    color: var(--text-muted);
+}
+
+.quantity-input {
+    width: 60px;
+    padding: 4px 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    text-align: center;
+    font-size: 12px;
 }
 
 /* Zone Constructeur */
@@ -293,7 +351,6 @@
     padding: 15px;
     background: #f9f9f9;
     min-height: fit-content;
-    /*max-height: 300px;*/
     overflow-y: auto;
 }
 
@@ -336,8 +393,15 @@
 }
 
 .colis-table tr.drop-active {
-    background: #e8f5e8;
-    border-left: 4px solid var(--success-color);
+    background: #e8f5e8 !important;
+    border-left: 4px solid var(--success-color) !important;
+    animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+    0% { background: #e8f5e8; }
+    50% { background: #c8e6c9; }
+    100% { background: #e8f5e8; }
 }
 
 .colis-table .colis-number {
@@ -359,6 +423,24 @@
     background: #fff3e0;
     font-weight: bold;
     border-left: 4px solid var(--secondary-color);
+}
+
+.colis-header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+
+.colis-header-left {
+    font-weight: bold;
+    color: var(--secondary-color);
+    font-size: 16px;
+}
+
+.colis-header-right {
+    color: var(--text-muted);
+    font-size: 14px;
 }
 
 .colis-table .colis-group-item {
@@ -551,8 +633,9 @@
 }
 
 .colis-content.drop-zone-active {
-    border-color: var(--success-color);
-    background: #e8f5e8;
+    border-color: var(--success-color) !important;
+    background: #e8f5e8 !important;
+    transform: scale(1.01);
 }
 
 .colis-line {
@@ -639,6 +722,12 @@
     pointer-events: none;
     text-align: center;
     font-size: 14px;
+    opacity: 1;
+    transition: opacity 0.3s;
+}
+
+.colis-content.drop-zone-active .drop-hint {
+    opacity: 0;
 }
 
 .empty-state {
@@ -671,8 +760,13 @@
     background: var(--success-color);
 }
 
-.status-indicator.warning { background: var(--warning-color); }
-.status-indicator.error { background: var(--error-color); }
+.status-indicator.warning { 
+    background: var(--warning-color); 
+}
+
+.status-indicator.error { 
+    background: var(--error-color); 
+}
 
 /* Messages de notification */
 .notification {
@@ -706,75 +800,6 @@
 
 .notification.info {
     background: var(--info-color);
-}
-
-/* Responsive design */
-@media (max-width: 1200px) {
-    .colisage-container {
-        flex-direction: column;
-        height: auto;
-    }
-    
-    .inventory-zone,
-    .constructor-zone {
-        width: 100%;
-    }
-    
-    .inventory-zone {
-        border-right: none;
-        border-bottom: 2px solid var(--border-color);
-        max-height: 400px;
-    }
-}
-
-@media (max-width: 768px) {
-    .colisage-header {
-        padding: 10px 15px;
-    }
-    
-    .colisage-title {
-        font-size: 20px;
-    }
-    
-    .sort-controls {
-        flex-direction: column;
-        gap: 5px;
-    }
-    
-    .colis-table {
-        font-size: 12px;
-    }
-    
-    .colis-table th,
-    .colis-table td {
-        padding: 6px 4px;
-    }
-}
-
-/* Scrollbars personnalisées */
-.inventory-list::-webkit-scrollbar,
-.colis-overview::-webkit-scrollbar,
-.colis-detail::-webkit-scrollbar {
-    width: 6px;
-}
-
-.inventory-list::-webkit-scrollbar-track,
-.colis-overview::-webkit-scrollbar-track,
-.colis-detail::-webkit-scrollbar-track {
-    background: #f1f1f1;
-}
-
-.inventory-list::-webkit-scrollbar-thumb,
-.colis-overview::-webkit-scrollbar-thumb,
-.colis-detail::-webkit-scrollbar-thumb {
-    background: #c1c1c1;
-    border-radius: 3px;
-}
-
-.inventory-list::-webkit-scrollbar-thumb:hover,
-.colis-overview::-webkit-scrollbar-thumb:hover,
-.colis-detail::-webkit-scrollbar-thumb:hover {
-    background: #a1a1a1;
 }
 
 /* Console de debug */
@@ -884,4 +909,74 @@
 
 .modal-btn.secondary:hover {
     background: #d0d0d0;
+}
+
+/* Responsive design */
+@media (max-width: 1200px) {
+    .colisage-container {
+        flex-direction: column;
+        height: auto;
+    }
+    
+    .inventory-zone,
+    .constructor-zone {
+        width: 100%;
+    }
+    
+    .inventory-zone {
+        border-right: none;
+        border-bottom: 2px solid var(--border-color);
+        max-height: 400px;
+    }
+}
+
+@media (max-width: 768px) {
+    .header {
+        padding: 10px 15px;
+    }
+    
+    .header h1,
+    .colisage-title {
+        font-size: 20px;
+    }
+    
+    .sort-controls {
+        flex-direction: column;
+        gap: 5px;
+    }
+    
+    .colis-table {
+        font-size: 12px;
+    }
+    
+    .colis-table th,
+    .colis-table td {
+        padding: 6px 4px;
+    }
+}
+
+/* Scrollbars personnalisées */
+.inventory-list::-webkit-scrollbar,
+.colis-overview::-webkit-scrollbar,
+.colis-detail::-webkit-scrollbar {
+    width: 6px;
+}
+
+.inventory-list::-webkit-scrollbar-track,
+.colis-overview::-webkit-scrollbar-track,
+.colis-detail::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+.inventory-list::-webkit-scrollbar-thumb,
+.colis-overview::-webkit-scrollbar-thumb,
+.colis-detail::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+}
+
+.inventory-list::-webkit-scrollbar-thumb:hover,
+.colis-overview::-webkit-scrollbar-thumb:hover,
+.colis-detail::-webkit-scrollbar-thumb:hover {
+    background: #a1a1a1;
 }
