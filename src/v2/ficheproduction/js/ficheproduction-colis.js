@@ -12,6 +12,7 @@
  */
 function addNewColis() {
     debugLog('Ajout nouveau colis');
+    const colis = FicheProduction.data.colis();
     const newId = Math.max(...colis.map(c => c.id), 0) + 1;
     const newNumber = Math.max(...colis.map(c => c.number), 0) + 1;
     
@@ -26,7 +27,7 @@ function addNewColis() {
         isLibre: false
     };
 
-    colis.push(newColis);
+    FicheProduction.data.addColis(newColis);
     renderColisOverview();
     selectColis(newColis);
     updateSummaryTotals(); // Mettre à jour les totaux
@@ -39,16 +40,19 @@ function addNewColis() {
 async function deleteColis(colisId) {
     debugLog(`Tentative suppression colis ID: ${colisId}`);
     
-    const confirmed = await showConfirm('Êtes-vous sûr de vouloir supprimer ce colis ?');
+    const confirmed = await FicheProduction.ui.showConfirm('Êtes-vous sûr de vouloir supprimer ce colis ?');
     if (!confirmed) {
         debugLog('Suppression annulée par utilisateur');
         return;
     }
 
+    const colis = FicheProduction.data.colis();
+    const products = FicheProduction.data.products();
     const coliData = colis.find(c => c.id === colisId);
+    
     if (!coliData) {
         debugLog('ERREUR: Colis non trouvé');
-        await showConfirm('Erreur: Colis non trouvé');
+        await FicheProduction.ui.showConfirm('Erreur: Colis non trouvé');
         return;
     }
     
@@ -76,20 +80,19 @@ async function deleteColis(colisId) {
     }
 
     // Supprimer le colis
-    const colisIndex = colis.findIndex(c => c.id === colisId);
-    if (colisIndex > -1) {
-        colis.splice(colisIndex, 1);
-        debugLog('Colis supprimé de la liste');
-    }
+    FicheProduction.data.removeColis(colisId);
     
     // Déselectionner si c'était le colis sélectionné
+    const selectedColis = FicheProduction.data.selectedColis();
     if (selectedColis && selectedColis.id === colisId) {
-        selectedColis = null;
+        FicheProduction.data.setSelectedColis(null);
         debugLog('Colis désélectionné');
     }
 
     // Re-render
-    renderInventory();
+    if (FicheProduction.inventory.renderInventory) {
+        FicheProduction.inventory.renderInventory();
+    }
     renderColisOverview();
     renderColisDetail();
     updateSummaryTotals(); // Mettre à jour les totaux
@@ -103,7 +106,7 @@ async function deleteColis(colisId) {
  */
 function selectColis(coliData) {
     debugLog(`Sélection colis ${coliData.id}`);
-    selectedColis = coliData;
+    FicheProduction.data.setSelectedColis(coliData);
     renderColisOverview();
     renderColisDetail();
 }
@@ -117,6 +120,8 @@ function selectColis(coliData) {
 function addProductToColis(colisId, productId, quantity) {
     debugLog(`🔧 Ajout produit ${productId} (qté: ${quantity}) au colis ${colisId}`);
     
+    const colis = FicheProduction.data.colis();
+    const products = FicheProduction.data.products();
     const coliData = colis.find(c => c.id === colisId);
     const product = products.find(p => p.id === productId);
     
@@ -159,8 +164,12 @@ function addProductToColis(colisId, productId, quantity) {
     product.used += quantity * coliData.multiple;
 
     // Re-render
-    renderInventory();
+    if (FicheProduction.inventory.renderInventory) {
+        FicheProduction.inventory.renderInventory();
+    }
     renderColisOverview();
+    
+    const selectedColis = FicheProduction.data.selectedColis();
     if (selectedColis && selectedColis.id === colisId) {
         renderColisDetail();
     }
@@ -173,6 +182,8 @@ function addProductToColis(colisId, productId, quantity) {
  * @param {number} productId - ID du produit
  */
 function removeProductFromColis(colisId, productId) {
+    const colis = FicheProduction.data.colis();
+    const products = FicheProduction.data.products();
     const coliData = colis.find(c => c.id === colisId);
     const productInColis = coliData ? coliData.products.find(p => p.productId === productId) : null;
     
@@ -196,7 +207,9 @@ function removeProductFromColis(colisId, productId) {
     coliData.totalWeight = coliData.products.reduce((sum, p) => sum + p.weight, 0);
 
     // Re-render
-    renderInventory();
+    if (FicheProduction.inventory.renderInventory) {
+        FicheProduction.inventory.renderInventory();
+    }
     renderColisOverview();
     renderColisDetail();
     updateSummaryTotals();
@@ -209,6 +222,8 @@ function removeProductFromColis(colisId, productId) {
  * @param {number} newQuantity - Nouvelle quantité
  */
 function updateProductQuantity(colisId, productId, newQuantity) {
+    const colis = FicheProduction.data.colis();
+    const products = FicheProduction.data.products();
     const coliData = colis.find(c => c.id === colisId);
     const productInColis = coliData ? coliData.products.find(p => p.productId === productId) : null;
     const product = products.find(p => p.id === productId);
@@ -227,7 +242,9 @@ function updateProductQuantity(colisId, productId, newQuantity) {
         
         coliData.totalWeight = coliData.products.reduce((sum, p) => sum + p.weight, 0);
         
-        renderInventory();
+        if (FicheProduction.inventory.renderInventory) {
+            FicheProduction.inventory.renderInventory();
+        }
         renderColisOverview();
         renderColisDetail();
         updateSummaryTotals();
@@ -254,7 +271,9 @@ function updateProductQuantity(colisId, productId, newQuantity) {
     coliData.totalWeight = coliData.products.reduce((sum, p) => sum + p.weight, 0);
 
     // Re-render
-    renderInventory();
+    if (FicheProduction.inventory.renderInventory) {
+        FicheProduction.inventory.renderInventory();
+    }
     renderColisOverview();
     renderColisDetail();
     updateSummaryTotals();
@@ -265,20 +284,22 @@ function updateProductQuantity(colisId, productId, newQuantity) {
  * @param {number} colisId - ID du colis
  */
 async function showDuplicateDialog(colisId) {
+    const colis = FicheProduction.data.colis();
     const coliData = colis.find(c => c.id === colisId);
+    
     if (!coliData) {
-        await showConfirm('Erreur: Colis non trouvé');
+        await FicheProduction.ui.showConfirm('Erreur: Colis non trouvé');
         return;
     }
 
     const currentMultiple = coliData.multiple || 1;
     const message = `Combien de fois créer ce colis identique ?\n\nActuellement: ${currentMultiple} colis`;
-    const newMultiple = await showPrompt(message, currentMultiple.toString());
+    const newMultiple = await FicheProduction.ui.showPrompt(message, currentMultiple.toString());
     
     if (newMultiple !== null && !isNaN(newMultiple) && parseInt(newMultiple) > 0) {
         updateColisMultiple(colisId, parseInt(newMultiple));
     } else if (newMultiple !== null) {
-        await showConfirm('Veuillez saisir un nombre entier positif');
+        await FicheProduction.ui.showConfirm('Veuillez saisir un nombre entier positif');
     }
 }
 
@@ -288,7 +309,10 @@ async function showDuplicateDialog(colisId) {
  * @param {number} multiple - Nouveau nombre de multiples
  */
 async function updateColisMultiple(colisId, multiple) {
+    const colis = FicheProduction.data.colis();
+    const products = FicheProduction.data.products();
     const coliData = colis.find(c => c.id === colisId);
+    
     if (!coliData) {
         return;
     }
@@ -297,7 +321,7 @@ async function updateColisMultiple(colisId, multiple) {
     const newMultiple = parseInt(multiple);
     
     if (isNaN(newMultiple) || newMultiple < 1) {
-        await showConfirm('Le nombre de colis doit être un entier positif');
+        await FicheProduction.ui.showConfirm('Le nombre de colis doit être un entier positif');
         return;
     }
 
@@ -312,7 +336,7 @@ async function updateColisMultiple(colisId, multiple) {
             
             // Vérifier qu'on ne dépasse pas le total disponible
             if (product.used > product.total) {
-                await showConfirm(`Attention: ${product.ref} - Quantité dépassée! Utilisé: ${product.used}, Total: ${product.total}`);
+                await FicheProduction.ui.showConfirm(`Attention: ${product.ref} - Quantité dépassée! Utilisé: ${product.used}, Total: ${product.total}`);
                 // Revenir à l'ancienne valeur
                 product.used -= p.quantity * multipleDiff;
                 return;
@@ -322,12 +346,46 @@ async function updateColisMultiple(colisId, multiple) {
 
     coliData.multiple = newMultiple;
     
-    renderInventory();
+    if (FicheProduction.inventory.renderInventory) {
+        FicheProduction.inventory.renderInventory();
+    }
     renderColisOverview();
+    
+    const selectedColis = FicheProduction.data.selectedColis();
     if (selectedColis && selectedColis.id === colisId) {
         renderColisDetail();
     }
     updateSummaryTotals();
+}
+
+/**
+ * Mettre à jour les totaux dans le tableau récapitulatif
+ */
+function updateSummaryTotals() {
+    const colis = FicheProduction.data.colis();
+    
+    // Calculer le nombre total de colis
+    let totalPackages = 0;
+    let totalWeight = 0;
+    
+    colis.forEach(c => {
+        totalPackages += c.multiple;
+        totalWeight += c.totalWeight * c.multiple;
+    });
+    
+    // Mettre à jour l'affichage
+    const totalPackagesElement = document.getElementById('total-packages');
+    const totalWeightElement = document.getElementById('total-weight');
+    
+    if (totalPackagesElement) {
+        totalPackagesElement.textContent = totalPackages;
+    }
+    
+    if (totalWeightElement) {
+        totalWeightElement.textContent = totalWeight.toFixed(1);
+    }
+    
+    debugLog(`Totaux mis à jour: ${totalPackages} colis, ${totalWeight.toFixed(1)} kg`);
 }
 
 /**
@@ -336,6 +394,10 @@ async function updateColisMultiple(colisId, multiple) {
 function renderColisOverview() {
     const tbody = document.getElementById('colisTableBody');
     tbody.innerHTML = '';
+
+    const colis = FicheProduction.data.colis();
+    const products = FicheProduction.data.products();
+    const selectedColis = FicheProduction.data.selectedColis();
 
     if (colis.length === 0) {
         tbody.innerHTML = '<tr><td colspan="6" class="empty-state">Aucun colis créé. Cliquez sur "Nouveau Colis" pour commencer.</td></tr>';
@@ -385,8 +447,8 @@ function renderColisOverview() {
         });
 
         // Setup drop zone pour l'en-tête du colis (seulement pour colis normaux)
-        if (!c.isLibre) {
-            setupDropZone(headerRow, c.id);
+        if (!c.isLibre && FicheProduction.dragdrop.setupDropZone) {
+            FicheProduction.dragdrop.setupDropZone(headerRow, c.id);
         }
         tbody.appendChild(headerRow);
 
@@ -405,8 +467,8 @@ function renderColisOverview() {
                 </td>
             `;
             
-            if (!c.isLibre) {
-                setupDropZone(emptyRow, c.id);
+            if (!c.isLibre && FicheProduction.dragdrop.setupDropZone) {
+                FicheProduction.dragdrop.setupDropZone(emptyRow, c.id);
             }
             tbody.appendChild(emptyRow);
         } else {
@@ -469,7 +531,7 @@ function renderColisOverview() {
                     editBtn.addEventListener('click', async (e) => {
                         e.stopPropagation();
                         const stockInfo = product.isLibre ? '' : `\n(Stock disponible: ${product.total - product.used})`;
-                        const newQuantity = await showPrompt(
+                        const newQuantity = await FicheProduction.ui.showPrompt(
                             `Nouvelle quantité pour ${product.name} :${stockInfo}`,
                             productInColis.quantity.toString()
                         );
@@ -482,7 +544,7 @@ function renderColisOverview() {
                 if (deleteBtn) {
                     deleteBtn.addEventListener('click', async (e) => {
                         e.stopPropagation();
-                        const confirmed = await showConfirm(
+                        const confirmed = await FicheProduction.ui.showConfirm(
                             `Supprimer ${product.name} du colis ${c.isLibre ? 'libre' : c.number} ?`
                         );
                         if (confirmed) {
@@ -498,8 +560,8 @@ function renderColisOverview() {
                     });
                 }
 
-                if (!c.isLibre) {
-                    setupDropZone(productRow, c.id);
+                if (!c.isLibre && FicheProduction.dragdrop.setupDropZone) {
+                    FicheProduction.dragdrop.setupDropZone(productRow, c.id);
                 }
                 tbody.appendChild(productRow);
             });
@@ -512,6 +574,7 @@ function renderColisOverview() {
  */
 function renderColisDetail() {
     const container = document.getElementById('colisDetail');
+    const selectedColis = FicheProduction.data.selectedColis();
     
     if (!selectedColis) {
         container.innerHTML = '<div class="empty-state">Sélectionnez un colis pour voir les détails</div>';
@@ -567,12 +630,14 @@ function renderColisDetail() {
 
     // Ajouter les vignettes dans la zone de contenu
     const colisContent = document.getElementById('colisContent');
+    const products = FicheProduction.data.products();
+    
     if (selectedColis.products.length > 0) {
         selectedColis.products.forEach((p, index) => {
             const product = products.find(prod => prod.id === p.productId);
             if (!product) return;
 
-            const vignette = createProductVignette(product, true, p.quantity);
+            const vignette = FicheProduction.inventory.createProductVignette(product, true, p.quantity);
             
             // Ajouter bouton supprimer
             const removeBtn = document.createElement('button');
@@ -625,12 +690,56 @@ function renderColisDetail() {
     });
 
     // Setup drop zone pour le contenu du colis (seulement pour colis normaux)
-    if (colisContent && !selectedColis.isLibre) {
-        setupDropZone(colisContent, selectedColis.id);
+    if (colisContent && !selectedColis.isLibre && FicheProduction.dragdrop.setupDropZone) {
+        FicheProduction.dragdrop.setupDropZone(colisContent, selectedColis.id);
     }
 }
 
-// Export des fonctions pour utilisation par d'autres modules
+/**
+ * Initialiser le module colis
+ */
+function initializeColisModule() {
+    debugLog('📦 Initialisation du module Colis');
+    
+    // Bouton Nouveau Colis
+    const addNewColisBtn = document.getElementById('addNewColisBtn');
+    if (addNewColisBtn) {
+        addNewColisBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            addNewColis();
+        });
+    }
+    
+    debugLog('✅ Module Colis initialisé');
+}
+
+// ============================================================================
+// REGISTRATION DU MODULE
+// ============================================================================
+
+// Enregistrer le module dans le namespace principal
+if (window.FicheProduction) {
+    window.FicheProduction.colis = {
+        addNewColis: addNewColis,
+        deleteColis: deleteColis,
+        selectColis: selectColis,
+        addProductToColis: addProductToColis,
+        removeProductFromColis: removeProductFromColis,
+        updateProductQuantity: updateProductQuantity,
+        showDuplicateDialog: showDuplicateDialog,
+        updateColisMultiple: updateColisMultiple,
+        updateSummaryTotals: updateSummaryTotals,
+        renderColisOverview: renderColisOverview,
+        renderColisDetail: renderColisDetail,
+        initialize: initializeColisModule
+    };
+    
+    debugLog('📦 Module Colis enregistré dans FicheProduction.colis');
+} else {
+    debugLog('❌ ERREUR: Namespace FicheProduction non disponible pour le module Colis');
+}
+
+// Export des fonctions pour compatibilité
 window.addNewColis = addNewColis;
 window.deleteColis = deleteColis;
 window.selectColis = selectColis;
@@ -639,5 +748,6 @@ window.removeProductFromColis = removeProductFromColis;
 window.updateProductQuantity = updateProductQuantity;
 window.showDuplicateDialog = showDuplicateDialog;
 window.updateColisMultiple = updateColisMultiple;
+window.updateSummaryTotals = updateSummaryTotals;
 window.renderColisOverview = renderColisOverview;
 window.renderColisDetail = renderColisDetail;
