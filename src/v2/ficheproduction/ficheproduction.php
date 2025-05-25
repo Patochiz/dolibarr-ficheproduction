@@ -10,7 +10,7 @@
 /**
  * \file        ficheproduction.php
  * \ingroup     ficheproduction
- * \brief       Interface drag & drop de colisage - Drag & Drop complet
+ * \brief       Interface drag & drop de colisage - Version corrigée et nettoyée
  */
 
 // Load Dolibarr environment
@@ -38,7 +38,6 @@ require_once dol_buildpath('/ficheproduction/class/ficheproductioncolisline.clas
 
 // Load translations
 $langs->loadLangs(array('orders', 'products', 'companies'));
-// Load custom module translations
 $langs->load('ficheproduction@ficheproduction');
 
 // Get parameters
@@ -132,10 +131,10 @@ if (!empty($action) && strpos($action, 'ficheproduction_') === 0) {
                                         'weight' => (!empty($product->weight) ? $product->weight : 1.0),
                                         'length' => $length,
                                         'width' => $width,
-                                        'total' => $quantity, // Using extrafield "nombre" as total available
+                                        'total' => $quantity,
                                         'used' => 0,
-                                        'line_id' => $line->id, // Store line ID for future reference
-                                        'line_order' => $lineIndex // Keep original order from command
+                                        'line_id' => $line->id,
+                                        'line_order' => $lineIndex
                                     );
                                     
                                     $data['products'][] = $productData;
@@ -177,11 +176,56 @@ if (!empty($action) && strpos($action, 'ficheproduction_') === 0) {
                     break;
                 }
                 
-                // Decode JSON data
+                // Decode JSON data with better error handling
                 $decodedData = json_decode($colisData, true);
-                if (!$decodedData || !is_array($decodedData)) {
-                    echo json_encode(['success' => false, 'error' => 'Données de colis invalides']);
+                $jsonError = json_last_error();
+                
+                if ($jsonError !== JSON_ERROR_NONE || !$decodedData || !is_array($decodedData)) {
+                    $errorMessage = 'Données de colis invalides';
+                    switch ($jsonError) {
+                        case JSON_ERROR_DEPTH:
+                            $errorMessage .= ': Profondeur maximale atteinte';
+                            break;
+                        case JSON_ERROR_STATE_MISMATCH:
+                            $errorMessage .= ': Inadéquation des modes ou underflow';
+                            break;
+                        case JSON_ERROR_CTRL_CHAR:
+                            $errorMessage .= ': Erreur lors du contrôle des caractères';
+                            break;
+                        case JSON_ERROR_SYNTAX:
+                            $errorMessage .= ': Erreur de syntaxe JSON';
+                            break;
+                        case JSON_ERROR_UTF8:
+                            $errorMessage .= ': Caractères UTF-8 mal formés';
+                            break;
+                        default:
+                            $errorMessage .= ': ' . json_last_error_msg();
+                    }
+                    echo json_encode(['success' => false, 'error' => $errorMessage]);
                     break;
+                }
+                
+                // Validate data structure
+                foreach ($decodedData as $index => $colisItem) {
+                    if (!is_array($colisItem)) {
+                        echo json_encode(['success' => false, 'error' => "Colis $index: structure invalide"]);
+                        break 2;
+                    }
+                    
+                    // Check required fields
+                    $requiredFields = ['number', 'products'];
+                    foreach ($requiredFields as $field) {
+                        if (!isset($colisItem[$field])) {
+                            echo json_encode(['success' => false, 'error' => "Colis $index: champ '$field' manquant"]);
+                            break 3;
+                        }
+                    }
+                    
+                    // Validate products array
+                    if (!is_array($colisItem['products'])) {
+                        echo json_encode(['success' => false, 'error' => "Colis $index: 'products' doit être un tableau"]);
+                        break 2;
+                    }
                 }
                 
                 // Use FicheProductionManager to save data
@@ -634,7 +678,7 @@ print '</div>';
 ?>
 
 <!-- Console de debug -->
-<div class="debug-console" id="debugConsole"></div>
+<div class="debug-console" id="debugConsole" style="display: none;"></div>
 
 <!-- Modales custom -->
 <div class="modal-overlay" id="confirmModal">
@@ -696,349 +740,29 @@ print '</div>';
     </div>
 </div>
 
+<!-- Inclusion du JavaScript corrigé -->
+<script src="<?php echo dol_buildpath('/ficheproduction/js/ficheproduction.js', 1); ?>"></script>
+
 <script>
-        // Variables globales
-        let products = [];
-        let productGroups = [];
-        let colis = [];
-        let selectedColis = null;
-        let draggedProduct = null;
-        let draggedColisLine = null;
-        let currentProductGroup = 'all';
-        let currentSort = 'original';
-        let isDragging = false;
-        let savedDataLoaded = false; // Pour éviter les chargements multiples
+// Initialisation une fois que le DOM est chargé
+document.addEventListener('DOMContentLoaded', function() {
+    // Configuration des variables globales
+    const ORDER_ID = <?php echo $object->id; ?>;
+    const TOKEN = '<?php echo newToken(); ?>';
+    
+    // Initialiser l'application
+    if (typeof initializeFicheProduction === 'function') {
+        initializeFicheProduction(ORDER_ID, TOKEN);
+    } else {
+        console.error('Fonction initializeFicheProduction non trouvée - Vérifiez que ficheproduction.js est bien chargé');
+    }
+});
+</script>
 
-        // Configuration
-        const ORDER_ID = <?php echo $object->id; ?>;
-        const TOKEN = '<?php echo newToken(); ?>';
+<?php
 
-        // Fonction de debug
-        function debugLog(message) {
-            console.log(message);
-            const debugConsole = document.getElementById('debugConsole');
-            if (debugConsole) {
-                debugConsole.innerHTML += new Date().toLocaleTimeString() + ': ' + message + '<br>';
-                debugConsole.scrollTop = debugConsole.scrollHeight;
-            }
-        }
+print dol_get_fiche_end();
 
-        // Fonction pour sauvegarder le colisage
-        async function saveColisage() {
-            if (colis.length === 0) {
-                await showConfirm('Aucun colis à sauvegarder.');
-                return;
-            }
-
-            // Afficher la modale de progression
-            showSaveProgress();
-
-            try {
-                // Préparer les données pour la sauvegarde
-                updateSaveProgress(25, 'Préparation des données...');
-                const colisageData = prepareColisageDataForSave();
-
-                updateSaveProgress(50, 'Envoi des données...');
-                const result = await apiCall('ficheproduction_save_colis', {
-                    colis_data: JSON.stringify(colisageData)
-                });
-
-                updateSaveProgress(75, 'Traitement...');
-                
-                if (result.success) {
-                    updateSaveProgress(100, 'Sauvegarde terminée !');
-                    
-                    setTimeout(() => {
-                        hideSaveProgress();
-                        showConfirm(`✅ Colisage sauvegardé avec succès !\n\n${result.message}\nSession ID: ${result.session_id}`);
-                        debugLog(`Sauvegarde réussie: ${result.message}`);
-                    }, 500);
-                } else {
-                    hideSaveProgress();
-                    await showConfirm(`❌ Erreur lors de la sauvegarde :\n${result.error || result.message}`);
-                    debugLog(`Erreur sauvegarde: ${result.error || result.message}`);
-                }
-
-            } catch (error) {
-                hideSaveProgress();
-                await showConfirm(`❌ Erreur technique :\n${error.message}`);
-                debugLog(`Erreur technique: ${error.message}`);
-            }
-        }
-
-        // Préparer les données pour la sauvegarde
-        function prepareColisageDataForSave() {
-            return colis.map(c => ({
-                number: c.number,
-                maxWeight: c.maxWeight,
-                totalWeight: c.totalWeight,
-                multiple: c.multiple,
-                status: c.status,
-                isLibre: c.isLibre || false,
-                products: c.products.map(p => {
-                    const product = products.find(prod => prod.id === p.productId);
-                    if (!product) return null;
-
-                    if (product.isLibre) {
-                        return {
-                            isLibre: true,
-                            name: product.name,
-                            description: '',
-                            quantity: p.quantity,
-                            weight: product.weight
-                        };
-                    } else {
-                        return {
-                            isLibre: false,
-                            productId: p.productId,
-                            quantity: p.quantity,
-                            weight: product.weight
-                        };
-                    }
-                }).filter(p => p !== null)
-            }));
-        }
-
-        // Gestion de la progression de sauvegarde
-        function showSaveProgress() {
-            const modal = document.getElementById('saveModal');
-            modal.classList.add('show');
-        }
-
-        function updateSaveProgress(percentage, message) {
-            const progressFill = document.getElementById('saveProgressFill');
-            const statusMessage = document.getElementById('saveStatusMessage');
-            
-            if (progressFill) {
-                progressFill.style.width = percentage + '%';
-            }
-            if (statusMessage) {
-                statusMessage.textContent = message;
-            }
-        }
-
-        function hideSaveProgress() {
-            const modal = document.getElementById('saveModal');
-            modal.classList.remove('show');
-        }
-
-        // Charger les données sauvegardées
-        async function loadSavedData() {
-            if (savedDataLoaded) return; // Éviter les chargements multiples
-
-            try {
-                debugLog('Chargement des données sauvegardées...');
-                const result = await apiCall('ficheproduction_load_saved_data');
-
-                if (result.success && result.colis && result.colis.length > 0) {
-                    debugLog(`Données sauvegardées trouvées: ${result.colis.length} colis`);
-                    
-                    // Convertir les données sauvegardées au format JavaScript
-                    const convertedColis = convertSavedDataToJS(result.colis);
-                    
-                    // Remplacer les colis actuels par les données sauvegardées
-                    colis = convertedColis;
-                    
-                    // Mettre à jour les quantités utilisées dans l'inventaire
-                    updateInventoryFromSavedData();
-                    
-                    // Re-render
-                    renderInventory();
-                    renderColisOverview();
-                    updateSummaryTotals();
-                    
-                    savedDataLoaded = true;
-                    debugLog('Données sauvegardées chargées avec succès');
-                } else {
-                    debugLog('Aucune donnée sauvegardée trouvée ou erreur: ' + (result.message || 'Erreur inconnue'));
-                }
-                
-            } catch (error) {
-                debugLog('Erreur lors du chargement des données sauvegardées: ' + error.message);
-            }
-        }
-
-        // Convertir les données sauvegardées au format JavaScript
-        function convertSavedDataToJS(savedColis) {
-            const convertedColis = [];
-            let maxColisId = Math.max(...colis.map(c => c.id), 0);
-
-            savedColis.forEach(savedColi => {
-                const newColis = {
-                    id: ++maxColisId,
-                    number: savedColi.number,
-                    products: [],
-                    totalWeight: savedColi.totalWeight,
-                    maxWeight: savedColi.maxWeight,
-                    status: savedColi.status,
-                    multiple: savedColi.multiple,
-                    isLibre: savedColi.isLibre || false
-                };
-
-                // Convertir les produits
-                savedColi.products.forEach(savedProduct => {
-                    if (savedProduct.isLibre) {
-                        // Créer un produit libre temporaire
-                        const libreProduct = createLibreProduct(savedProduct.name, savedProduct.weight);
-                        products.push(libreProduct);
-                        
-                        newColis.products.push({
-                            productId: libreProduct.id,
-                            quantity: savedProduct.quantity,
-                            weight: savedProduct.quantity * savedProduct.weight
-                        });
-                    } else {
-                        // Produit standard - trouver dans l'inventaire existant
-                        const product = products.find(p => !p.isLibre && matchSavedProduct(p, savedProduct));
-                        if (product) {
-                            newColis.products.push({
-                                productId: product.id,
-                                quantity: savedProduct.quantity,
-                                weight: savedProduct.quantity * savedProduct.weight
-                            });
-                        }
-                    }
-                });
-
-                convertedColis.push(newColis);
-            });
-
-            return convertedColis;
-        }
-
-        // Vérifier si un produit correspond aux données sauvegardées
-        function matchSavedProduct(product, savedProduct) {
-            // Simple matching par ID de produit Dolibarr si disponible
-            return savedProduct.productId && product.line_id === savedProduct.productId;
-        }
-
-        // Mettre à jour l'inventaire basé sur les données sauvegardées
-        function updateInventoryFromSavedData() {
-            // Réinitialiser toutes les quantités utilisées
-            products.forEach(p => {
-                if (!p.isLibre) {
-                    p.used = 0;
-                }
-            });
-
-            // Recalculer les quantités utilisées basées sur les colis sauvegardés
-            colis.forEach(c => {
-                c.products.forEach(p => {
-                    const product = products.find(prod => prod.id === p.productId);
-                    if (product && !product.isLibre) {
-                        product.used += p.quantity * c.multiple;
-                    }
-                });
-            });
-        }
-
-        // Fonction pour mettre à jour les totaux dans le tableau récapitulatif
-        function updateSummaryTotals() {
-            // Calculer le nombre total de colis
-            let totalPackages = 0;
-            let totalWeight = 0;
-            
-            colis.forEach(c => {
-                totalPackages += c.multiple;
-                totalWeight += c.totalWeight * c.multiple;
-            });
-            
-            // Mettre à jour l'affichage
-            const totalPackagesElement = document.getElementById('total-packages');
-            const totalWeightElement = document.getElementById('total-weight');
-            
-            if (totalPackagesElement) {
-                totalPackagesElement.textContent = totalPackages;
-            }
-            
-            if (totalWeightElement) {
-                totalWeightElement.textContent = totalWeight.toFixed(1);
-            }
-            
-            debugLog(`Totaux mis à jour: ${totalPackages} colis, ${totalWeight.toFixed(1)} kg`);
-        }
-
-        // Fonction pour créer une vignette produit (utilisée dans inventaire et colis)
-        function createProductVignette(product, isInColis = false, currentQuantity = 1) {
-            // Gestion des produits libres (pas de contraintes de stock)
-            if (product.isLibre) {
-                const vignetteElement = document.createElement('div');
-                vignetteElement.className = 'product-item libre-item';
-                if (isInColis) {
-                    vignetteElement.classList.add('in-colis');
-                }
-
-                const quantityInputHtml = isInColis ? `
-                    <div class="quantity-input-container">
-                        <span class="quantity-input-label">Qté:</span>
-                        <input type="number" class="quantity-input" value="${currentQuantity}" min="1" 
-                               data-product-id="${product.id}">
-                    </div>
-                ` : '';
-
-                vignetteElement.innerHTML = `
-                    <div class="product-header">
-                        <span class="product-ref">${product.name}</span>
-                        <span class="product-color libre-badge">LIBRE</span>
-                    </div>
-                    
-                    <div class="product-dimensions">
-                        Poids unitaire: ${product.weight}kg
-                    </div>
-                    <div class="quantity-info">
-                        <span class="libre-info">📦 Élément libre</span>
-                    </div>
-                    ${quantityInputHtml}
-                    <div class="status-indicator libre"></div>
-                `;
-
-                return vignetteElement;
-            }
-
-            // Produits normaux (existant)
-            const available = product.total - product.used;
-            const percentage = (product.used / product.total) * 100;
-            let status = 'available';
-            
-            if (available === 0) status = 'exhausted';
-            else if (product.used > 0) status = 'partial';
-
-            const vignetteElement = document.createElement('div');
-            vignetteElement.className = `product-item ${status}`;
-            if (isInColis) {
-                vignetteElement.classList.add('in-colis');
-            }
-            if (!isInColis) {
-                vignetteElement.draggable = status !== 'exhausted';
-                vignetteElement.dataset.productId = product.id;
-            }
-
-            // Ajouter input de quantité pour les vignettes dans les colis
-            const quantityInputHtml = isInColis ? `
-                <div class="quantity-input-container">
-                    <span class="quantity-input-label">Qté:</span>
-                    <input type="number" class="quantity-input" value="${currentQuantity}" min="1" 
-                           data-product-id="${product.id}">
-                </div>
-            ` : '';
-
-            vignetteElement.innerHTML = `
-                <div class="product-header">
-                    <span class="product-ref">${product.name}</span>
-                    <span class="product-color">${product.color}</span>
-                </div>
-                
-                <div class="product-dimensions">
-                    L: ${product.length}mm × l: ${product.width}mm ${product.ref_ligne ? `<strong>Réf: ${product.ref_ligne}</strong>` : ''}
-                </div>
-                <div class="quantity-info">
-                    <span class="quantity-used">${product.used}</span>
-                    <span>/</span>
-                    <span class="quantity-total">${product.total}</span>
-                    <div class="quantity-bar">
-                        <div class="quantity-progress" style="width: ${percentage}%"></div>
-                    </div>
-                </div>
-                ${quantityInputHtml}
-                <div class="status-indicator ${status === 'exhausted' ? 'error' : status === 'partial' ? 'warning' : ''}"></div>
-            `;
+// End of page
+llxFooter();
+?>
