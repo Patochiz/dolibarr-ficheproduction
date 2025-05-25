@@ -27,7 +27,7 @@ function displayFicheProductionContent($object, $form, $langs, $userCanEdit, $us
     $product_count = countProductsInOrder($object, $db);
     
     // Display summary section
-    displaySummarySection($object, $langs, $userCanEdit);
+    displaySummarySection($object, $langs, $userCanEdit, $db);
     
     // Display main interface
     displayMainInterface($object, $product_count);
@@ -68,7 +68,7 @@ function countProductsInOrder($object, $db)
 /**
  * Display summary section
  */
-function displaySummarySection($object, $langs, $userCanEdit) 
+function displaySummarySection($object, $langs, $userCanEdit, $db) 
 {
     global $form;
     
