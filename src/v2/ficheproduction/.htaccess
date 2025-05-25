@@ -1,0 +1,39 @@
+# Security for debug files
+# Remove or rename debug files in production
+
+<Files "debug.php">
+    # Require admin access
+    # Uncomment and configure as needed
+    # Require ip 127.0.0.1
+    # AuthType Basic
+    # AuthName "Debug Access"
+    # AuthUserFile /path/to/.htpasswd
+    # Require valid-user
+</Files>
+
+<Files "test_permissions.php">
+    # Require admin access
+    # Same restrictions as debug.php
+</Files>
+
+<Files "quick_fix.php">
+    # Require admin access
+    # Same restrictions as debug.php
+</Files>
+
+<Files "ficheproduction_minimal.php">
+    # Test file - can be less restricted
+</Files>
+
+# Prevent access to sensitive files
+<Files "*.sql">
+    Deny from all
+</Files>
+
+<Files "*.md">
+    Deny from all
+</Files>
+
+<Files ".git*">
+    Deny from all
+</Files>

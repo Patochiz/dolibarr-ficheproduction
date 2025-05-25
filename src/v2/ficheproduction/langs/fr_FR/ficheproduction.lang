@@ -1,0 +1,185 @@
+# Module label 'ModuleFicheProduction'
+ModuleFicheProduction = Fiche de Production v2.0
+# Module description 'ModuleFicheProductionDesc'
+ModuleFicheProductionDesc = Module de gestion des fiches de production et plans de colisage avec interface moderne
+
+#
+# Page d'accueil
+#
+FicheProductionArea = Espace Fiche de Production
+MyFicheProduction = Ma fiche de production
+
+#
+# Page générale
+#
+FicheProduction = Fiche de Production
+ProductionSheet = Fiche de Production v2.0
+NewProductionSheet = Nouvelle fiche de production
+FicheProductionList = Liste des fiches de production
+ColisageManager = Gestionnaire de Colisage
+
+#
+# Page configuration
+#
+FicheProductionSetup = Configuration du module Fiche de Production v2.0
+Settings = Paramètres
+FicheProductionSetupPage = Page de configuration du module Fiche de Production
+
+#
+# Interface de colisage
+#
+InventoryZone = Zone Inventaire
+ConstructorZone = Zone Constructeur
+ProductInventory = Inventaire Produits
+ColisageConstructor = Constructeur de Colis
+SearchProduct = Rechercher un produit
+SortBy = Trier par
+FilterBy = Filtrer par
+AllProducts = Tous les produits
+AvailableProducts = Disponibles
+PartiallyUsed = Partiellement utilisés
+ExhaustedProducts = Épuisés
+SortByRef = Trier par Référence
+SortByName = Trier par Nom
+SortByLength = Trier par Longueur
+SortByWidth = Trier par Largeur
+SortByColor = Trier par Couleur
+
+#
+# Colis
+#
+NewColis = Nouveau Colis
+ColisNumber = Colis
+ColisOverview = Vue d'ensemble des colis
+ColisDetail = Détail du colis
+ColisWeight = Poids du colis
+ColisMaxWeight = Poids maximum
+ColisStatus = Statut
+MultipleColis = Colis multiples
+DeleteColis = Supprimer le colis
+DuplicateColis = Dupliquer le colis
+
+#
+# Produits
+#
+ProductRef = Référence
+ProductName = Nom du produit
+ProductColor = Couleur
+ProductQuantity = Quantité
+ProductWeight = Poids
+ProductLength = Longueur
+ProductWidth = Largeur
+ProductUsed = Utilisé
+ProductTotal = Total
+ProductAvailable = Disponible
+AddProduct = Ajouter produit
+RemoveProduct = Supprimer produit
+EditQuantity = Modifier quantité
+
+#
+# Actions
+#
+Save = Enregistrer
+Cancel = Annuler
+Delete = Supprimer
+Add = Ajouter
+Edit = Modifier
+Confirm = Confirmer
+Close = Fermer
+Print = Imprimer
+Export = Exporter
+
+#
+# Messages
+#
+SessionSaved = Session sauvegardée avec succès
+ColisCreated = Colis créé avec succès
+ColisDeleted = Colis supprimé avec succès
+ProductAdded = Produit ajouté au colis
+ProductRemoved = Produit retiré du colis
+QuantityUpdated = Quantité mise à jour
+InsufficientQuantity = Quantité insuffisante
+WeightExceeded = Poids maximum dépassé
+ConfirmDeleteColis = Êtes-vous sûr de vouloir supprimer ce colis ?
+ConfirmDeleteProduct = Êtes-vous sûr de vouloir supprimer ce produit du colis ?
+SelectColis = Sélectionnez un colis pour voir les détails
+CreateNewColis = Créez un nouveau colis pour commencer
+DragProductHere = Glissez un produit ici pour l'ajouter
+EmptyColis = Colis vide
+
+#
+# Contraintes
+#
+Constraints = Contraintes
+WeightConstraint = Contrainte de poids
+MaxWeight = Poids maximum
+CurrentWeight = Poids actuel
+WeightOK = Poids OK
+WeightWarning = Attention au poids
+WeightDanger = Poids dépassé
+
+#
+# Informations commande
+#
+OrderInfo = Informations de la commande
+CustomerOrder = Commande client
+OrderReference = Référence de la commande
+CustomerName = Client
+ProjectReference = Référence du chantier
+Comments = Commentaires
+TotalPackages = Total colis
+TotalWeight = Poids total
+DeliveryInformation = Adresse de livraison
+
+#
+# Statuts
+#
+StatusOK = OK
+StatusWarning = Attention
+StatusError = Erreur
+StatusDraft = Brouillon
+StatusActive = Actif
+StatusCanceled = Annulé
+
+#
+# Interface drag & drop
+#
+DragAndDrop = Glisser-déposer
+DropZoneActive = Zone de dépôt active
+Dragging = En cours de déplacement
+DropHint = Glissez un produit ici pour l'ajouter au colis
+ReorderProducts = Réorganiser les produits
+MoveProduct = Déplacer le produit
+
+#
+# Permissions
+#
+PermissionRead = Lire les fiches de production
+PermissionWrite = Créer/modifier les fiches de production
+PermissionDelete = Supprimer les fiches de production
+
+#
+# Configuration
+#
+DefaultMaxWeight = Poids maximum par défaut (kg)
+AutoCreateSession = Créer automatiquement une session pour les nouvelles commandes
+ModuleVersion = Version du module
+Configuration = Configuration
+AdvancedSettings = Paramètres avancés
+
+#
+# Tableau d'en-tête et pied de page
+#
+FinalChecks = Vérifications finales
+FinalPackaging = Colisage final
+Pallets = Palettes
+Being = étant
+Packages = Colis
+Bundles = Fagots
+BulkPackages = Colis en vrac
+TotalNumberOfPackages = Nombre total de colis
+ProductionSheetVerificationBy = Fiche de production vérifiée par
+FinalCounting = Comptage final
+AndReturnDateBy = et date de retour par
+CoilsIDUsed = Identifiants des bobines utilisées
+PrintButton = Imprimer

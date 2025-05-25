@@ -1,0 +1,411 @@
+/* 
+ * Styles CSS pour la fonctionnalité de sauvegarde 
+ * Fichier complémentaire pour ficheproduction.css
+ */
+
+/* === MODAL DE SAUVEGARDE === */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 10000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-overlay.show {
+    display: flex;
+}
+
+.modal-content {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    max-width: 90%;
+    max-height: 90%;
+    overflow-y: auto;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    position: relative;
+}
+
+.modal-large {
+    width: 600px;
+}
+
+.modal-header {
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #ddd;
+}
+
+.modal-message {
+    margin-bottom: 20px;
+    line-height: 1.5;
+}
+
+.modal-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.modal-btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.2s;
+}
+
+.modal-btn.primary {
+    background: #007cba;
+    color: white;
+}
+
+.modal-btn.primary:hover {
+    background: #005a87;
+}
+
+.modal-btn.secondary {
+    background: #f0f0f0;
+    color: #333;
+}
+
+.modal-btn.secondary:hover {
+    background: #e0e0e0;
+}
+
+.modal-btn.danger {
+    background: #d63031;
+    color: white;
+}
+
+.modal-btn.danger:hover {
+    background: #b92c2d;
+}
+
+.modal-input {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    margin-bottom: 10px;
+}
+
+/* === BARRE DE PROGRESSION === */
+.save-progress {
+    text-align: center;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 20px;
+    background: #f0f0f0;
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 15px;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #007cba, #00a8ff);
+    border-radius: 10px;
+    transition: width 0.3s ease;
+    width: 0%;
+}
+
+#saveStatusMessage {
+    font-weight: bold;
+    color: #333;
+}
+
+/* === FORMS COLIS LIBRE === */
+.colis-libre-form {
+    margin: 20px 0;
+}
+
+.colis-libre-item {
+    margin-bottom: 15px;
+    padding: 15px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: #f9f9f9;
+}
+
+.colis-libre-fields {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr auto;
+    gap: 10px;
+    align-items: center;
+}
+
+.libre-name,
+.libre-weight,
+.libre-quantity {
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+.btn-remove-libre-item {
+    background: #d63031;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.btn-remove-libre-item:hover {
+    background: #b92c2d;
+}
+
+.btn-add-item {
+    background: #00b894;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 10px 20px;
+    cursor: pointer;
+    font-weight: bold;
+    margin-top: 10px;
+}
+
+.btn-add-item:hover {
+    background: #00a085;
+}
+
+/* === BOUTONS D'ACTION === */
+.btn-add-colis,
+.btn-add-colis-libre {
+    background: #007cba;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 10px 15px;
+    cursor: pointer;
+    font-weight: bold;
+    margin-left: 10px;
+    transition: background-color 0.2s;
+}
+
+.btn-add-colis:hover,
+.btn-add-colis-libre:hover {
+    background: #005a87;
+}
+
+.btn-add-colis-libre {
+    background: #00b894;
+}
+
+.btn-add-colis-libre:hover {
+    background: #00a085;
+}
+
+/* === INDICATEURS DE STATUT === */
+.product-item.libre-item {
+    border-left: 4px solid #00b894;
+}
+
+.libre-badge {
+    background: #00b894 !important;
+    color: white !important;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 3px;
+}
+
+.libre-info {
+    color: #00b894;
+    font-weight: bold;
+    font-size: 12px;
+}
+
+.status-indicator.libre {
+    background: #00b894;
+}
+
+.colis-group-header.colis-libre {
+    background: linear-gradient(90deg, #f8fffe 0%, #e8f8f5 100%);
+    border-left: 4px solid #00b894;
+}
+
+.colis-group-item.colis-libre {
+    background: #f8fffe;
+    border-left: 2px solid #00b894;
+}
+
+/* === ZONES DE DROP ACTIVES === */
+.drop-active {
+    background: linear-gradient(45deg, #e3f2fd 25%, transparent 25%),
+                linear-gradient(-45deg, #e3f2fd 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, #e3f2fd 75%),
+                linear-gradient(-45deg, transparent 75%, #e3f2fd 75%);
+    background-size: 20px 20px;
+    background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+    border: 2px dashed #2196f3 !important;
+    animation: dropZoneAnimation 2s linear infinite;
+}
+
+@keyframes dropZoneAnimation {
+    0% { background-position: 0 0, 0 10px, 10px -10px, -10px 0px; }
+    100% { background-position: 20px 20px, 20px 30px, 30px 10px, 10px 20px; }
+}
+
+.drop-zone-active {
+    border: 3px dashed #4caf50 !important;
+    background: rgba(76, 175, 80, 0.1);
+}
+
+/* === AMÉLIORATION INTERFACE === */
+.constructor-buttons {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.save-success {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+    border-radius: 4px;
+    padding: 10px;
+    margin: 10px 0;
+}
+
+.save-error {
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+    border-radius: 4px;
+    padding: 10px;
+    margin: 10px 0;
+}
+
+/* === RESPONSIVE === */
+@media (max-width: 768px) {
+    .modal-content {
+        max-width: 95%;
+        padding: 15px;
+    }
+    
+    .colis-libre-fields {
+        grid-template-columns: 1fr;
+        gap: 5px;
+    }
+    
+    .constructor-buttons {
+        flex-direction: column;
+        gap: 5px;
+    }
+    
+    .btn-add-colis,
+    .btn-add-colis-libre {
+        width: 100%;
+        margin-left: 0;
+    }
+}
+
+/* === ANIMATIONS === */
+@keyframes saveSuccess {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+.save-success-animation {
+    animation: saveSuccess 0.5s ease-in-out;
+}
+
+/* === TOOLTIPS POUR SAUVEGARDE === */
+.save-tooltip {
+    position: relative;
+    display: inline-block;
+}
+
+.save-tooltip .tooltiptext {
+    visibility: hidden;
+    width: 200px;
+    background-color: #333;
+    color: #fff;
+    text-align: center;
+    border-radius: 6px;
+    padding: 5px;
+    position: absolute;
+    z-index: 1;
+    bottom: 125%;
+    left: 50%;
+    margin-left: -100px;
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+
+.save-tooltip:hover .tooltiptext {
+    visibility: visible;
+    opacity: 1;
+}
+
+/* === DEBUG CONSOLE AMÉLIORÉE === */
+#debugConsole {
+    display: none;
+    position: fixed;
+    bottom: 10px;
+    right: 10px;
+    width: 400px;
+    height: 200px;
+    background: rgba(0, 0, 0, 0.9);
+    color: #00ff00;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    padding: 10px;
+    border-radius: 5px;
+    overflow-y: auto;
+    z-index: 9999;
+    border: 1px solid #333;
+}
+
+#debugConsole::-webkit-scrollbar {
+    width: 6px;
+}
+
+#debugConsole::-webkit-scrollbar-track {
+    background: #333;
+}
+
+#debugConsole::-webkit-scrollbar-thumb {
+    background: #666;
+    border-radius: 3px;
+}
+
+/* === BOUTONS TABSACTION AMÉLIORÉS === */
+.tabsAction .butAction {
+    margin-right: 10px;
+    padding: 8px 16px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.tabsAction .butAction:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Styles spécifiques pour le bouton de sauvegarde */
+#saveColisageBtn {
+    background: linear-gradient(135deg, #007cba, #00a8ff);
+    color: white;
+    font-weight: bold;
+}
+
+#saveColisageBtn:hover {
+    background: linear-gradient(135deg, #005a87, #0078e7);
+}
