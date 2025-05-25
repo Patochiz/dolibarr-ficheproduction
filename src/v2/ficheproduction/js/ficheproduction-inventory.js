@@ -109,6 +109,7 @@ function createProductVignette(product, isInColis = false, currentQuantity = 1) 
  * @returns {Object} - Objet produit libre
  */
 function createLibreProduct(name, weight, quantity = 1) {
+    const products = FicheProduction.data.products();
     const newId = Math.max(...products.map(p => p.id), 10000) + 1;
     return {
         id: newId,
@@ -124,6 +125,9 @@ function createLibreProduct(name, weight, quantity = 1) {
  * Mettre à jour l'inventaire basé sur les données sauvegardées
  */
 function updateInventoryFromSavedData() {
+    const products = FicheProduction.data.products();
+    const colis = FicheProduction.data.colis();
+    
     // Réinitialiser toutes les quantités utilisées
     products.forEach(p => {
         if (!p.isLibre) {
@@ -146,6 +150,7 @@ function updateInventoryFromSavedData() {
  * Remplir le sélecteur de groupes de produits
  */
 function populateProductGroupSelector() {
+    const productGroups = FicheProduction.data.productGroups();
     const selector = document.getElementById('productGroupSelect');
     
     // Conserver l'option "Tous les produits"
@@ -206,6 +211,11 @@ function renderInventory() {
     const container = document.getElementById('inventoryList');
     container.innerHTML = '';
 
+    const products = FicheProduction.data.products();
+    const productGroups = FicheProduction.data.productGroups();
+    const currentProductGroup = FicheProduction.state.currentProductGroup();
+    const currentSort = FicheProduction.state.currentSort();
+
     // Filtrer les produits selon le groupe sélectionné (exclure les produits libres)
     let filteredProducts = products.filter(p => !p.isLibre);
     if (currentProductGroup !== 'all') {
@@ -231,33 +241,99 @@ function renderInventory() {
                 return;
             }
             
-            isDragging = true;
-            draggedProduct = product;
+            FicheProduction.state.setDragging(true);
+            FicheProduction.state.setDraggedProduct(product);
             this.classList.add('dragging');
             e.dataTransfer.effectAllowed = 'copy';
             debugLog(`🚀 Drag start: ${product.ref}`);
             
             // Activer les zones de drop après un délai
             setTimeout(() => {
-                activateDropZones();
+                if (FicheProduction.dragdrop.activateDropZones) {
+                    FicheProduction.dragdrop.activateDropZones();
+                }
             }, 50);
         });
 
         productElement.addEventListener('dragend', function(e) {
             this.classList.remove('dragging');
-            isDragging = false;
-            draggedProduct = null;
+            FicheProduction.state.setDragging(false);
+            FicheProduction.state.setDraggedProduct(null);
             debugLog(`🛑 Drag end: ${product.ref}`);
             
             // Désactiver les zones de drop
-            deactivateDropZones();
+            if (FicheProduction.dragdrop.deactivateDropZones) {
+                FicheProduction.dragdrop.deactivateDropZones();
+            }
         });
 
         container.appendChild(productElement);
     });
 }
 
-// Export des fonctions pour utilisation par d'autres modules
+/**
+ * Initialiser le module inventory
+ */
+function initializeInventoryModule() {
+    debugLog('📦 Initialisation du module Inventory');
+    
+    // Événements pour les contrôles d'inventaire
+    const searchBox = document.getElementById('searchBox');
+    if (searchBox) {
+        searchBox.addEventListener('input', function(e) {
+            const searchTerm = e.target.value.toLowerCase();
+            const productItems = document.querySelectorAll('.product-item');
+            
+            productItems.forEach(item => {
+                const text = item.textContent.toLowerCase();
+                item.style.display = text.includes(searchTerm) ? 'block' : 'none';
+            });
+        });
+    }
+
+    // Sélecteur de groupe de produits
+    const productGroupSelect = document.getElementById('productGroupSelect');
+    if (productGroupSelect) {
+        productGroupSelect.addEventListener('change', function(e) {
+            FicheProduction.state.setCurrentProductGroup(e.target.value);
+            renderInventory();
+        });
+    }
+
+    // Sélecteur de tri
+    const sortSelect = document.getElementById('sortSelect');
+    if (sortSelect) {
+        sortSelect.addEventListener('change', function(e) {
+            FicheProduction.state.setCurrentSort(e.target.value);
+            renderInventory();
+        });
+    }
+    
+    debugLog('✅ Module Inventory initialisé');
+}
+
+// ============================================================================
+// REGISTRATION DU MODULE
+// ============================================================================
+
+// Enregistrer le module dans le namespace principal
+if (window.FicheProduction) {
+    window.FicheProduction.inventory = {
+        createProductVignette: createProductVignette,
+        createLibreProduct: createLibreProduct,
+        updateInventoryFromSavedData: updateInventoryFromSavedData,
+        populateProductGroupSelector: populateProductGroupSelector,
+        sortProducts: sortProducts,
+        renderInventory: renderInventory,
+        initialize: initializeInventoryModule
+    };
+    
+    debugLog('📦 Module Inventory enregistré dans FicheProduction.inventory');
+} else {
+    debugLog('❌ ERREUR: Namespace FicheProduction non disponible pour le module Inventory');
+}
+
+// Export des fonctions pour compatibilité
 window.createProductVignette = createProductVignette;
 window.createLibreProduct = createLibreProduct;
 window.updateInventoryFromSavedData = updateInventoryFromSavedData;
