@@ -11,7 +11,7 @@
  * Activer les zones de drop quand un élément est en cours de drag
  */
 function activateDropZones() {
-    if (!isDragging) return;
+    if (!FicheProduction.state.isDragging()) return;
     
     debugLog('🎯 Activation des zones de drop');
     
@@ -25,6 +25,7 @@ function activateDropZones() {
     
     // Activer la zone de détail du colis sélectionné
     const colisContent = document.getElementById('colisContent');
+    const selectedColis = FicheProduction.data.selectedColis();
     if (colisContent && selectedColis) {
         colisContent.classList.add('drop-zone-active');
     }
@@ -59,9 +60,14 @@ function setupDropZone(element, colisId) {
         e.preventDefault();
         e.stopPropagation();
         
+        const draggedProduct = FicheProduction.state.draggedProduct();
+        const isDragging = FicheProduction.state.isDragging();
+        
         if (draggedProduct && isDragging) {
-            debugLog(`📍 Drop sur colis ${colisId} - Produit: ${draggedProduct.ref}`);
-            addProductToColis(colisId, draggedProduct.id, 1);
+            debugLog(`📍 Drop sur colis ${colisId} - Produit: ${draggedProduct.ref || draggedProduct.name}`);
+            if (FicheProduction.colis.addProductToColis) {
+                FicheProduction.colis.addProductToColis(colisId, draggedProduct.id, 1);
+            }
         }
     });
 }
@@ -79,8 +85,8 @@ function setupProductDragEvents(productElement, product) {
             return;
         }
         
-        isDragging = true;
-        draggedProduct = product;
+        FicheProduction.state.setDragging(true);
+        FicheProduction.state.setDraggedProduct(product);
         this.classList.add('dragging');
         e.dataTransfer.effectAllowed = 'copy';
         debugLog(`🚀 Drag start: ${product.ref || product.name}`);
@@ -93,8 +99,8 @@ function setupProductDragEvents(productElement, product) {
 
     productElement.addEventListener('dragend', function(e) {
         this.classList.remove('dragging');
-        isDragging = false;
-        draggedProduct = null;
+        FicheProduction.state.setDragging(false);
+        FicheProduction.state.setDraggedProduct(null);
         debugLog(`🛑 Drag end: ${product.ref || product.name}`);
         
         // Désactiver les zones de drop
@@ -112,8 +118,8 @@ function setupColisLineDragEvents(colisLineElement, colisId, productId) {
     colisLineElement.draggable = true;
     
     colisLineElement.addEventListener('dragstart', function(e) {
-        isDragging = true;
-        draggedColisLine = { colisId, productId };
+        FicheProduction.state.setDragging(true);
+        FicheProduction.state.setDraggedColisLine({ colisId, productId });
         this.classList.add('dragging');
         e.dataTransfer.effectAllowed = 'move';
         debugLog(`🚀 Drag start ligne colis: ${colisId}-${productId}`);
@@ -126,8 +132,8 @@ function setupColisLineDragEvents(colisLineElement, colisId, productId) {
 
     colisLineElement.addEventListener('dragend', function(e) {
         this.classList.remove('dragging');
-        isDragging = false;
-        draggedColisLine = null;
+        FicheProduction.state.setDragging(false);
+        FicheProduction.state.setDraggedColisLine(null);
         debugLog(`🛑 Drag end ligne colis`);
         
         // Désactiver les zones de drop
@@ -139,6 +145,9 @@ function setupColisLineDragEvents(colisLineElement, colisId, productId) {
  * Activer les zones de drop pour la réorganisation des colis
  */
 function activateColisReorderZones() {
+    const isDragging = FicheProduction.state.isDragging();
+    const draggedColisLine = FicheProduction.state.draggedColisLine();
+    
     if (!isDragging || !draggedColisLine) return;
     
     debugLog('🎯 Activation zones réorganisation colis');
@@ -170,6 +179,7 @@ function deactivateColisReorderZones() {
  */
 function setupColisReorderDropZone(element, targetColisId) {
     element.addEventListener('dragover', function(e) {
+        const draggedColisLine = FicheProduction.state.draggedColisLine();
         if (draggedColisLine && draggedColisLine.colisId !== targetColisId) {
             e.preventDefault();
             e.dataTransfer.dropEffect = 'move';
@@ -177,6 +187,7 @@ function setupColisReorderDropZone(element, targetColisId) {
     });
 
     element.addEventListener('drop', function(e) {
+        const draggedColisLine = FicheProduction.state.draggedColisLine();
         if (draggedColisLine && draggedColisLine.colisId !== targetColisId) {
             e.preventDefault();
             e.stopPropagation();
@@ -194,6 +205,8 @@ function setupColisReorderDropZone(element, targetColisId) {
  * @param {number} productId - ID du produit à déplacer
  */
 function moveProductBetweenColis(sourceColisId, targetColisId, productId) {
+    const colis = FicheProduction.data.colis();
+    const products = FicheProduction.data.products();
     const sourceColis = colis.find(c => c.id === sourceColisId);
     const targetColis = colis.find(c => c.id === targetColisId);
     
@@ -263,10 +276,18 @@ function moveProductBetweenColis(sourceColisId, targetColisId, productId) {
     }
 
     // Re-render
-    renderInventory();
-    renderColisOverview();
-    renderColisDetail();
-    updateSummaryTotals();
+    if (FicheProduction.inventory.renderInventory) {
+        FicheProduction.inventory.renderInventory();
+    }
+    if (FicheProduction.colis.renderColisOverview) {
+        FicheProduction.colis.renderColisOverview();
+    }
+    if (FicheProduction.colis.renderColisDetail) {
+        FicheProduction.colis.renderColisDetail();
+    }
+    if (FicheProduction.colis.updateSummaryTotals) {
+        FicheProduction.colis.updateSummaryTotals();
+    }
     
     debugLog(`Produit ${productId} déplacé du colis ${sourceColisId} vers ${targetColisId}`);
 }
@@ -296,7 +317,31 @@ function initializeDragAndDrop() {
     debugLog('✅ Système drag & drop initialisé');
 }
 
-// Export des fonctions pour utilisation par d'autres modules
+// ============================================================================
+// REGISTRATION DU MODULE
+// ============================================================================
+
+// Enregistrer le module dans le namespace principal
+if (window.FicheProduction) {
+    window.FicheProduction.dragdrop = {
+        activateDropZones: activateDropZones,
+        deactivateDropZones: deactivateDropZones,
+        setupDropZone: setupDropZone,
+        setupProductDragEvents: setupProductDragEvents,
+        setupColisLineDragEvents: setupColisLineDragEvents,
+        activateColisReorderZones: activateColisReorderZones,
+        deactivateColisReorderZones: deactivateColisReorderZones,
+        setupColisReorderDropZone: setupColisReorderDropZone,
+        moveProductBetweenColis: moveProductBetweenColis,
+        initialize: initializeDragAndDrop
+    };
+    
+    debugLog('📦 Module Drag&Drop enregistré dans FicheProduction.dragdrop');
+} else {
+    debugLog('❌ ERREUR: Namespace FicheProduction non disponible pour le module Drag&Drop');
+}
+
+// Export des fonctions pour compatibilité
 window.activateDropZones = activateDropZones;
 window.deactivateDropZones = deactivateDropZones;
 window.setupDropZone = setupDropZone;
