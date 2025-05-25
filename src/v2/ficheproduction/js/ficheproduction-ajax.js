@@ -70,13 +70,18 @@
                 debugLog(`✅ Trouvé ${result.product_groups ? result.product_groups.length : 0} groupes de produits`);
                 
                 // Remplir le sélecteur de groupes
-                if (FicheProduction.inventory.populateProductGroupSelector) {
+                if (FicheProduction.inventory && FicheProduction.inventory.populateProductGroupSelector) {
                     FicheProduction.inventory.populateProductGroupSelector();
                 }
                 
                 // Rendu initial de l'inventaire
-                if (FicheProduction.inventory.render) {
-                    FicheProduction.inventory.render();
+                if (FicheProduction.inventory && FicheProduction.inventory.renderInventory) {
+                    FicheProduction.inventory.renderInventory();
+                }
+                
+                // Rendu initial des colis
+                if (FicheProduction.colis && FicheProduction.colis.renderColisOverview) {
+                    FicheProduction.colis.renderColisOverview();
                 }
                 
                 // Après avoir chargé les données de base, essayer de charger les données sauvegardées
@@ -106,17 +111,19 @@
                     FicheProduction.data.setColis(convertedColis);
                     
                     // Mettre à jour les quantités utilisées dans l'inventaire
-                    this.updateInventoryFromSavedData();
+                    if (FicheProduction.inventory && FicheProduction.inventory.updateInventoryFromSavedData) {
+                        FicheProduction.inventory.updateInventoryFromSavedData();
+                    }
                     
                     // Re-render
-                    if (FicheProduction.inventory.render) {
-                        FicheProduction.inventory.render();
+                    if (FicheProduction.inventory && FicheProduction.inventory.renderInventory) {
+                        FicheProduction.inventory.renderInventory();
                     }
-                    if (FicheProduction.colis.renderOverview) {
-                        FicheProduction.colis.renderOverview();
+                    if (FicheProduction.colis && FicheProduction.colis.renderColisOverview) {
+                        FicheProduction.colis.renderColisOverview();
                     }
-                    if (FicheProduction.utils.updateSummaryTotals) {
-                        FicheProduction.utils.updateSummaryTotals();
+                    if (FicheProduction.colis && FicheProduction.colis.updateSummaryTotals) {
+                        FicheProduction.colis.updateSummaryTotals();
                     }
                     
                     FicheProduction.data.setSavedDataLoaded(true);
@@ -209,97 +216,70 @@
         },
 
         /**
-         * Mettre à jour l'inventaire basé sur les données sauvegardées
-         */
-        updateInventoryFromSavedData() {
-            const products = FicheProduction.data.products();
-            const colis = FicheProduction.data.colis();
-            
-            // Réinitialiser toutes les quantités utilisées
-            products.forEach(p => {
-                if (!p.isLibre) {
-                    p.used = 0;
-                }
-            });
-
-            // Recalculer les quantités utilisées basées sur les colis sauvegardés
-            colis.forEach(c => {
-                c.products.forEach(p => {
-                    const product = products.find(prod => prod.id === p.productId);
-                    if (product && !product.isLibre) {
-                        product.used += p.quantity * c.multiple;
-                    }
-                });
-            });
-            
-            FicheProduction.data.setProducts(products);
-        },
-
-        /**
          * Sauvegarder le colisage
          */
         async saveColisage() {
             const colis = FicheProduction.data.colis();
             
             if (colis.length === 0) {
-                if (FicheProduction.ui.showConfirm) {
+                if (FicheProduction.ui && FicheProduction.ui.showConfirm) {
                     await FicheProduction.ui.showConfirm('Aucun colis à sauvegarder.');
                 }
                 return;
             }
 
             // Afficher la modale de progression
-            if (FicheProduction.ui.showSaveProgress) {
+            if (FicheProduction.ui && FicheProduction.ui.showSaveProgress) {
                 FicheProduction.ui.showSaveProgress();
             }
 
             try {
                 // Préparer les données pour la sauvegarde
-                if (FicheProduction.ui.updateSaveProgress) {
+                if (FicheProduction.ui && FicheProduction.ui.updateSaveProgress) {
                     FicheProduction.ui.updateSaveProgress(25, 'Préparation des données...');
                 }
                 const colisageData = this.prepareColisageDataForSave();
 
-                if (FicheProduction.ui.updateSaveProgress) {
+                if (FicheProduction.ui && FicheProduction.ui.updateSaveProgress) {
                     FicheProduction.ui.updateSaveProgress(50, 'Envoi des données...');
                 }
                 const result = await this.apiCall('ficheproduction_save_colis', {
                     colis_data: JSON.stringify(colisageData)
                 });
 
-                if (FicheProduction.ui.updateSaveProgress) {
+                if (FicheProduction.ui && FicheProduction.ui.updateSaveProgress) {
                     FicheProduction.ui.updateSaveProgress(75, 'Traitement...');
                 }
                 
                 if (result.success) {
-                    if (FicheProduction.ui.updateSaveProgress) {
+                    if (FicheProduction.ui && FicheProduction.ui.updateSaveProgress) {
                         FicheProduction.ui.updateSaveProgress(100, 'Sauvegarde terminée !');
                     }
                     
                     setTimeout(() => {
-                        if (FicheProduction.ui.hideSaveProgress) {
+                        if (FicheProduction.ui && FicheProduction.ui.hideSaveProgress) {
                             FicheProduction.ui.hideSaveProgress();
                         }
-                        if (FicheProduction.ui.showConfirm) {
+                        if (FicheProduction.ui && FicheProduction.ui.showConfirm) {
                             FicheProduction.ui.showConfirm(`✅ Colisage sauvegardé avec succès !\n\n${result.message}\nSession ID: ${result.session_id}`);
                         }
                         debugLog(`✅ Sauvegarde réussie: ${result.message}`);
                     }, 500);
                 } else {
-                    if (FicheProduction.ui.hideSaveProgress) {
+                    if (FicheProduction.ui && FicheProduction.ui.hideSaveProgress) {
                         FicheProduction.ui.hideSaveProgress();
                     }
-                    if (FicheProduction.ui.showConfirm) {
+                    if (FicheProduction.ui && FicheProduction.ui.showConfirm) {
                         await FicheProduction.ui.showConfirm(`❌ Erreur lors de la sauvegarde :\n${result.error || result.message}`);
                     }
                     debugLog(`❌ Erreur sauvegarde: ${result.error || result.message}`);
                 }
 
             } catch (error) {
-                if (FicheProduction.ui.hideSaveProgress) {
+                if (FicheProduction.ui && FicheProduction.ui.hideSaveProgress) {
                     FicheProduction.ui.hideSaveProgress();
                 }
-                if (FicheProduction.ui.showConfirm) {
+                if (FicheProduction.ui && FicheProduction.ui.showConfirm) {
                     await FicheProduction.ui.showConfirm(`❌ Erreur technique :\n${error.message}`);
                 }
                 debugLog(`❌ Erreur technique: ${error.message}`);
